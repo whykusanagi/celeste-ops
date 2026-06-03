@@ -1,6 +1,7 @@
 # Verifying a CelesteOps release
 
-CelesteOps releases are **PGP-signed** for integrity and authorship. The app bundle itself is ad-hoc signed (not Apple-notarized yet), so authenticity is established by verifying the release signature below — not by macOS Gatekeeper.
+Each release is PGP-signed for integrity and authorship, and the app is Apple
+Developer-ID codesigned and notarized so it opens without Gatekeeper warnings.
 
 Signing key:
 
@@ -11,35 +12,39 @@ fingerprint  9404 90EF 09DA 3132 2BF7  FD83 8758 49AB 1D54 1C55
 
 ## Verify the download
 
-Download the app archive, `checksums.txt`, and `checksums.txt.asc` from the same Release into one folder, then:
+Download the app archive, `checksums.txt`, and `checksums.txt.asc` from the same
+Release into one folder, then:
 
 ```bash
-# 1. Import the signing key (any one source — all serve the identical key)
+# 1. Import the signing key (any one source; all serve the identical key).
 curl -s https://keybase.io/whykusanagi/pgp_keys.asc | gpg --import
 #   or: curl -s https://github.com/whykusanagi.gpg | gpg --import
 #   or: gpg --keyserver keys.openpgp.org --recv-keys 940490EF09DA31322BF7FD83875849AB1D541C55
 
-# 2. Confirm the fingerprint matches exactly
+# 2. Confirm the fingerprint.
 gpg --fingerprint 940490EF09DA31322BF7FD83875849AB1D541C55
 #   → 9404 90EF 09DA 3132 2BF7  FD83 8758 49AB 1D54 1C55
 
-# 3. Verify the signature on the checksum file (authenticity)
-gpg --verify checksums.txt.asc checksums.txt        # expect "Good signature"
+# 3. Verify the signature on the checksum file (authenticity).
+gpg --verify checksums.txt.asc checksums.txt        # "Good signature"
 
-# 4. Verify the download matches the checksum (integrity)
-shasum -a 256 -c checksums.txt                       # expect "OK"
+# 4. Verify the download matches the checksum (integrity).
+shasum -a 256 -c checksums.txt                       # "OK"
 ```
 
-If step 3 says **Good signature** and step 4 says **OK**, the download is authentic and untampered.
+A "Good signature" in step 3 and "OK" in step 4 mean the download is authentic
+and untampered.
 
-## Launching on macOS
+## Confirm the app's code signature
 
-The app isn't Apple-notarized, so macOS quarantines it on first launch. After verifying above, either:
+```bash
+codesign --verify --deep --strict --verbose=2 /Applications/CelesteOps.app
+spctl -a -t exec -vvv /Applications/CelesteOps.app   # "accepted", "Notarized Developer ID"
+```
 
-- Right-click `CelesteOps.app` → **Open** → **Open** (one-time), or
-- Strip the quarantine attribute:
-  ```bash
-  xattr -dr com.apple.quarantine /Applications/CelesteOps.app
-  ```
+If a build ever ships without notarization, macOS quarantines it on first launch.
+Right-click the app and choose Open, or clear the quarantine flag:
 
-This friction is the trade-off for not enrolling in the Apple Developer Program. The in-app build-info panel shows the running build's version, channel, hash, and signing status.
+```bash
+xattr -dr com.apple.quarantine /Applications/CelesteOps.app
+```
