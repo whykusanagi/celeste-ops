@@ -3,7 +3,7 @@
  * install-mcp.ts — wire every MCP client on this machine to the CelesteOps
  * MCP bridge.
  *
- * All clients are pointed at the SAME stdio shim (extension/server/index.js),
+ * All clients are pointed at the SAME stdio shim (server/index.js),
  * a pure-Node MCP server that forwards all 56 tools to the running app's HTTP
  * API (default 127.0.0.1:43121). This keeps the desktop app as the single
  * source of truth — its UI live-updates as any client makes changes — and
