@@ -1,10 +1,10 @@
 {
-  "name": "celeste-ops-extension",
+  "name": "celeste-ops-shim",
   "version": "1.0.0",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "CelesteOps Claude Desktop extension — MCP shim over the local app HTTP API",
+  "description": "CelesteOps MCP shim — a stdio MCP server over the local app HTTP API (also bundled as the Claude Desktop .mcpb)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

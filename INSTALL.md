@@ -9,9 +9,8 @@ like Codex that block direct loopback.
 ## Prerequisites
 
 - **The CelesteOps app, installed and running.** Download
-  `CelesteOps-<version>-macos-<arch>.zip` from this repo's
-  [Releases](https://github.com/whykusanagi/celeste-ops/releases) (pick the
-  `arm64` asset for Apple Silicon Macs, `x64` for Intel), verify it
+  `CelesteOps-<version>-macos-arm64.zip` (Apple Silicon) from this repo's
+  [Releases](https://github.com/whykusanagi/celeste-ops/releases), verify it
   ([VERIFY.md](./VERIFY.md)), unzip it, move `CelesteOps.app` to `/Applications`,
   and launch it. The shim forwards to its API on `127.0.0.1:43121`.
 - This repo, cloned locally (you run the installer from it).

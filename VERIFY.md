@@ -17,12 +17,12 @@ Download the app archive, `checksums.txt`, and `checksums.txt.asc` from the same
 Release into one folder, then:
 
 ```bash
-# 1. Import the signing key (any one source; all serve the identical key).
-curl -s https://keybase.io/whykusanagi/pgp_keys.asc | gpg --import
-#   or: curl -s https://github.com/whykusanagi.gpg | gpg --import
-#   or: gpg --keyserver keys.openpgp.org --recv-keys 940490EF09DA31322BF7FD83875849AB1D541C55
+# 1. Import the signing key. This repo ships it as whykusanagi.asc — use that copy,
+#    it carries the signing subkey the release was signed with.
+gpg --import whykusanagi.asc
 
-# 2. Confirm the fingerprint.
+# 2. Confirm the fingerprint, and cross-check it against an independent source:
+#    the same primary fingerprint is published at https://github.com/whykusanagi.gpg
 gpg --fingerprint 940490EF09DA31322BF7FD83875849AB1D541C55
 #   → 9404 90EF 09DA 3132 2BF7  FD83 8758 49AB 1D54 1C55
 
@@ -34,7 +34,9 @@ shasum -a 256 -c checksums.txt                       # "OK"
 ```
 
 A "Good signature" in step 3 and "OK" in step 4 mean the download is authentic
-and untampered.
+and untampered. The trust anchor is the primary fingerprint in step 2: it matches
+the key GitHub serves at `https://github.com/whykusanagi.gpg`, and the signing
+subkey is certified under it.
 
 ## Launching on macOS
 

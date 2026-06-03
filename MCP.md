@@ -2,7 +2,7 @@
 
 This document is the single source of truth for any LLM operating the CelesteOps MCP server. It covers what the system is, how to connect, every data entity, all business rules, all 56 tools with full input/output documentation, recommended workflows, example prompts, and error handling. Read this document fully before making any tool calls.
 
-> **Tool count:** This document is kept in sync with `app/src/mcp/server.ts`. The exact number of registered tools is **56** — verify with `grep -c 'server.registerTool' app/src/mcp/server.ts`.
+> **Tool count:** the shim exposes **56** tools. Confirm what your client sees after connecting — Claude Code: `/mcp`; Celeste CLI: the TUI's MCP panel.
 
 ---
 
@@ -48,10 +48,8 @@ CelesteOps manages:
 
 All data lives in a local SQLite database. There are two front-ends over the same database layer, both entirely local:
 
-- **The app's HTTP API** (`app/src/server/api.ts`), hosted by the running desktop app on `127.0.0.1:43121`. This is the single writer — its UI live-updates as changes land.
-- **A stdio MCP shim** (`server/index.js`), which exposes all 56 tools over the Model Context Protocol and forwards each call to that HTTP API. This is what MCP clients (Claude Code, Claude Desktop, Cursor, Codex, …) connect to.
-
-(A direct-to-SQLite stdio server also exists at `app/src/mcp/server.ts` / `bun run mcp`. It bypasses the app and does **not** trigger the UI's live-update, so it's intended for development only — prefer the shim above.)
+- **The app's HTTP API**, hosted by the running desktop app on `127.0.0.1:43121`. This is the single writer — its UI live-updates as changes land.
+- **A stdio MCP shim** (`server/index.js` in this kit), which exposes all 56 tools over the Model Context Protocol and forwards each call to that HTTP API. This is what MCP clients (Claude Code, Claude Desktop, Cursor, Codex, …) connect to.
 
 ---
 
@@ -72,11 +70,10 @@ If `curl` connects and returns `{"ok":true,...}`, the app is up and the fault is
 
 ### Step 2: One-command install (recommended)
 
-From the project root:
+From the cloned repo root:
 
 ```bash
-bun install                         # once, at repo root
-cd extension && npm install && cd ..  # once, vendors the shim's deps
+cd server && npm install && cd ..   # once, vendors the shim's deps
 bun run install:mcp                 # detect installed clients and wire them up
 ```
 
