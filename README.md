@@ -21,8 +21,11 @@ private; here you get the built app plus what a client needs to connect to it.
 
 ## Quick start
 
-1. Download the app from a Release and verify it ([VERIFY.md](./VERIFY.md)), then launch it.
-2. Connect your clients ([INSTALL.md](./INSTALL.md) has the detail):
+1. Download `CelesteOps-<version>-macos-<arch>.zip` from this repo's
+   [Releases](https://github.com/whykusanagi/celeste-ops/releases) (`arm64` for
+   Apple Silicon, `x64` for Intel). Verify it ([VERIFY.md](./VERIFY.md)), unzip it,
+   move `CelesteOps.app` to `/Applications`, and launch it.
+2. Clone this repo, then connect your clients ([INSTALL.md](./INSTALL.md) has the detail):
    ```bash
    cd server && npm install && cd ..
    # In the app: Settings → Connections → Add Client, then copy the code.

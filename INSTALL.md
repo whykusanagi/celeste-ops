@@ -8,8 +8,16 @@ like Codex that block direct loopback.
 
 ## Prerequisites
 
-- The CelesteOps app running. The shim forwards to its API on `127.0.0.1:43121`.
-- Node 18+ (runs the shim) and [Bun](https://bun.sh) (runs the installer).
+- **The CelesteOps app, installed and running.** Download
+  `CelesteOps-<version>-macos-<arch>.zip` from this repo's
+  [Releases](https://github.com/whykusanagi/celeste-ops/releases) (pick the
+  `arm64` asset for Apple Silicon Macs, `x64` for Intel), verify it
+  ([VERIFY.md](./VERIFY.md)), unzip it, move `CelesteOps.app` to `/Applications`,
+  and launch it. The shim forwards to its API on `127.0.0.1:43121`.
+- This repo, cloned locally (you run the installer from it).
+- Node 18+ (runs the shim) and [Bun](https://bun.sh) (runs the installer). The
+  installer writes the shim's absolute node path into each config, so GUI clients
+  that don't inherit your shell `PATH` still launch it.
 
 ## Install
 
@@ -32,9 +40,24 @@ your other servers and backs up each file before writing. Use `--dry-run` to
 preview and `--port <n>` for a non-default API port.
 
 Run it without `--pair` and the clients get wired but carry no token, so the app
-rejects them with a 401. Always pass `--pair <code>`.
+rejects them with a 401. Always pass `--pair <code>`. A code is valid for about
+five minutes and covers every client in one run; if `install:mcp` reports an
+invalid or expired code, generate a fresh one and re-run.
 
 Claude Desktop has a shortcut: drag `celeste-ops.mcpb` onto Settings → Extensions.
+
+## Install the agent skill (optional)
+
+The MCP tools work on their own. To also give an agent the `celesteops-tasks`
+skill (it teaches the agent how to read and write CelesteOps tasks), copy it into
+the client's skills directory. For Claude Code:
+
+```bash
+cp -r skills/celesteops-tasks ~/.claude/skills/
+```
+
+This skill format is for Claude Code and Claude Desktop. Cursor, Codex, and
+Celeste CLI use the MCP tools directly (no skill file needed).
 
 ## Managing connections
 
