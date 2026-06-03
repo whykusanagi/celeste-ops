@@ -21,10 +21,12 @@ private; here you get the built app plus what a client needs to connect to it.
 
 ## Quick start
 
-1. Download `CelesteOps-<version>-macos-<arch>.zip` from this repo's
-   [Releases](https://github.com/whykusanagi/celeste-ops/releases) (`arm64` for
-   Apple Silicon, `x64` for Intel). Verify it ([VERIFY.md](./VERIFY.md)), unzip it,
-   move `CelesteOps.app` to `/Applications`, and launch it.
+1. Download the macOS app from the latest
+   [Release](https://github.com/whykusanagi/celeste-ops/releases/latest):
+   `CelesteOps-<version>-macos-arm64.zip` for Apple Silicon. Verify it
+   ([VERIFY.md](./VERIFY.md)), unzip it, move `CelesteOps.app` to `/Applications`,
+   and launch it. The build is ad-hoc signed, so on first launch right-click the
+   app and choose Open.
 2. Clone this repo, then connect your clients ([INSTALL.md](./INSTALL.md) has the detail):
    ```bash
    cd server && npm install && cd ..
@@ -32,7 +34,7 @@ private; here you get the built app plus what a client needs to connect to it.
    bun run install:mcp --pair <code>
    ```
 
-## Status
+## License
 
-Pre-release. `server/index.js` and `MCP.md` are generated from the private
-`content-control` repo at each release. Edit them there, not here.
+Proprietary. Free to download and run to connect your own clients to your own
+CelesteOps app; redistribution and resale are reserved. See [LICENSE](./LICENSE).

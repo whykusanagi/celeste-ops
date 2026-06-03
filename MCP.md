@@ -49,7 +49,7 @@ CelesteOps manages:
 All data lives in a local SQLite database. There are two front-ends over the same database layer, both entirely local:
 
 - **The app's HTTP API** (`app/src/server/api.ts`), hosted by the running desktop app on `127.0.0.1:43121`. This is the single writer — its UI live-updates as changes land.
-- **A stdio MCP shim** (`extension/server/index.js`), which exposes all 56 tools over the Model Context Protocol and forwards each call to that HTTP API. This is what MCP clients (Claude Code, Claude Desktop, Cursor, Codex, …) connect to.
+- **A stdio MCP shim** (`server/index.js`), which exposes all 56 tools over the Model Context Protocol and forwards each call to that HTTP API. This is what MCP clients (Claude Code, Claude Desktop, Cursor, Codex, …) connect to.
 
 (A direct-to-SQLite stdio server also exists at `app/src/mcp/server.ts` / `bun run mcp`. It bypasses the app and does **not** trigger the UI's live-update, so it's intended for development only — prefer the shim above.)
 
@@ -57,24 +57,18 @@ All data lives in a local SQLite database. There are two front-ends over the sam
 
 ## Connection
 
-Every client connects over **stdio** to the same shim (`extension/server/index.js`), which forwards to the running app's HTTP API. Because the client↔shim hop is stdio (no network), this works identically in every client — including sandboxed ones like Codex that block direct loopback connections.
+Every client connects over **stdio** to the same shim (`server/index.js`), which forwards to the running app's HTTP API. Because the client↔shim hop is stdio (no network), this works identically in every client — including sandboxed ones like Codex that block direct loopback connections.
 
 ### Step 1: Start the CelesteOps app
 
-The shim forwards to the app's HTTP API, so **the app must be running** before any client can use the tools. From the project root:
-
-```bash
-bun run dev          # launches the CelesteOps desktop app (electrobun dev)
-```
-
-(`bun run build` produces a packaged `.app` you can launch instead.) Confirm the API is up — this is also the health check to run any time a client reports it can't reach CelesteOps:
+The shim forwards to the app's HTTP API, so **the app must be running** before any client can use the tools. Launch `CelesteOps.app` from `/Applications` (or Spotlight). Confirm the API is up — this is also the health check to run any time a client reports it can't reach CelesteOps:
 
 ```bash
 curl -s http://127.0.0.1:43121/api/health
 # → {"ok":true,"apiBaseUrl":"http://127.0.0.1:43121",...}
 ```
 
-If `curl` connects and returns `{"ok":true,...}`, the app is up and the fault is elsewhere (client config or sandbox). If it refuses the connection, the app isn't running — start it with `bun run dev`.
+If `curl` connects and returns `{"ok":true,...}`, the app is up and the fault is elsewhere (client config or sandbox). If it refuses the connection, the app isn't running — launch `CelesteOps.app`.
 
 ### Step 2: One-command install (recommended)
 
@@ -90,7 +84,7 @@ This merges a `celeste-ops` MCP server into each detected client's config — **
 
 > **Celeste CLI note:** external MCP servers are loaded only by the interactive `celeste chat` TUI (not `message`/`agent`/`serve`). On launch it connects to the shim and registers all 56 tools — confirm in the TUI's MCP panel.
 
-For Claude Desktop, the packaged `extension/celeste-ops.mcpb` bundle is the preferred one-click path (drag onto **Settings → Extensions**).
+For Claude Desktop, the packaged `celeste-ops.mcpb` bundle is the preferred one-click path (drag onto **Settings → Extensions**).
 
 ### Generic stdio config (manual)
 
@@ -99,7 +93,7 @@ Use this only if your client isn't auto-detected by `install:mcp`. Resolve the t
 ```json
 {
   "command": "/abs/path/to/node",
-  "args": ["/abs/path/to/content-control/extension/server/index.js"],
+  "args": ["/abs/path/to/celeste-ops/server/index.js"],
   "env": { "CELESTE_OPS_API_PORT": "43121" }
 }
 ```
@@ -108,10 +102,10 @@ Use this only if your client isn't auto-detected by `install:mcp`. Resolve the t
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) to run the app, the installer, and root deps (`bun install` at the repo root)
+- [Bun](https://bun.sh) to run the installer (`bun run install:mcp`)
 - [Node](https://nodejs.org) 18+ (the shim is pure Node; Claude Desktop's bundled runtime works for the `.mcpb`)
-- Shim dependencies vendored: `cd extension && npm install`
-- The CelesteOps app running (`bun run dev`) — the shim forwards to its HTTP API
+- Shim dependencies vendored: `cd server && npm install`
+- The CelesteOps app installed and running — the shim forwards to its HTTP API
 
 ### Optional: R2 environment variables for backups
 
@@ -2307,7 +2301,7 @@ Note: Only 3 P1s allowed per day. Check `p1ActiveCount` first; use P2 if cap is 
 
 **Resolution**:
 1. Health-check the API: `curl -s http://127.0.0.1:43121/api/health`. If it returns `{"ok":true,...}`, the app is up — skip to step 3.
-2. If `curl` is refused, the app is down. Start it: `bun run dev`. Then re-run the health check.
+2. If `curl` is refused, the app is down. Launch `CelesteOps.app`. Then re-run the health check.
 3. App is up but a client still can't see the tools → the client isn't wired to the shim. Re-run `bun run install:mcp` (or `--dry-run` to inspect the resolved config) and restart the client. A **sandboxed client (e.g. Codex) that blocks loopback is not the cause** — the client↔shim hop is stdio, so the sandbox never sees the HTTP call; the shim (a normal subprocess) makes it.
 4. Non-default port: ensure the app's port and the shim's `CELESTE_OPS_API_PORT` match; reinstall with `bun run install:mcp --port <n>`.
 

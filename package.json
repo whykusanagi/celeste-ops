@@ -2,6 +2,7 @@
   "name": "celeste-ops-kit",
   "version": "1.0.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "description": "CelesteOps agent kit — MCP shim + installer + docs for connecting LLM clients to the CelesteOps app",
   "scripts": {

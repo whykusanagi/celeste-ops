@@ -1,0 +1,34 @@
+CelesteOps Software License
+Copyright (c) 2026 whykusanagi (KusanagiAbyss). All rights reserved.
+
+"The Software" means the CelesteOps macOS application distributed through this
+repository's Releases, together with the MCP shim, installer, skills, and
+documentation contained in this repository.
+
+1. Grant. You are granted a personal, non-exclusive, non-transferable, revocable
+   license to download, install, and run the Software in order to connect your
+   own MCP clients to your own CelesteOps app, at no charge.
+
+2. Restrictions. Without prior written permission from the copyright holder, you
+   may not:
+   a. redistribute, resell, sublicense, lease, host, or otherwise make the
+      Software available to any third party, whether or not for a fee;
+   b. modify, adapt, or create derivative works of the Software for distribution,
+      or merge it into another product;
+   c. decompile, disassemble, or reverse engineer the application binary, except
+      to the extent that applicable law expressly permits despite this limitation;
+   d. remove, obscure, or alter any copyright, signing, or attribution notices,
+      including the PGP signatures on releases.
+
+3. Reservation. All rights not expressly granted are reserved by the copyright
+   holder, including the right to distribute, sell, or publish the Software
+   commercially (for example, through an app store) on any terms.
+
+4. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO
+   EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+   LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+5. Termination. This license terminates automatically if you breach any term.
+   On termination you must stop using and delete the Software.

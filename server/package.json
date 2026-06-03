@@ -2,11 +2,12 @@
   "name": "celeste-ops-extension",
   "version": "1.0.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "description": "CelesteOps Claude Desktop extension — MCP shim over the local app HTTP API",
-  "main": "server/index.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.4",
