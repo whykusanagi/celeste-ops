@@ -696,7 +696,7 @@ server.registerTool('document_create', {
 
 server.registerTool('document_update', {
   title: 'Update Document',
-  description: 'Patch a document. At least one of title/body/tags/folder/review_status required. Returns {document}.',
+  description: 'Patch a document. At least one of title/body/tags/folder/review_status required. Returns {document}. NOTE: if the doc is in a review workflow (review_status "in-review" or "approved") and you change its content WITHOUT also passing review_status, it auto-flips to "modified" and bumps review_status_updated_at — signaling a watcher to re-read it from CelesteOps rather than trust a cached copy. Pass review_status explicitly to edit without signaling. Docs with review_status=null never auto-flip.',
   inputSchema: {
     id: z.string().min(1),
     patch: z.object({
