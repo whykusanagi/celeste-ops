@@ -1813,9 +1813,20 @@ Patches a document. Bumps `updated_at`.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | `string` (UUID) | Yes | Document id. |
-| `patch` | object | Yes | At least one of: `title`, `body`, `tags`. |
+| `patch` | object | Yes | At least one of: `title`, `body`, `tags`, `folder`, `review_status`. |
 
 **Returns** `{ "document": Document }` (full updated record). Errors with `Document not found` if the id doesn't exist.
+
+> **Auto-modified on content edits.** If the doc is in a review workflow
+> (`review_status` is `in-review` or `approved`) and you change its content
+> (`title`/`body`/`tags`/`folder`) **without** also passing `review_status`, the
+> status auto-flips to `modified` and `review_status_updated_at` is bumped. This
+> is the signal a watching agent polls on (`documents_review_changes_since`): it
+> means the doc changed, so the agent must **re-read it from CelesteOps** instead
+> of trusting a cached/in-context copy or the local mirrored markdown. No-op saves
+> (identical content) don't trigger it. To edit without signaling, pass the
+> intended `review_status` explicitly in the same patch — an explicit value
+> always wins. Docs with `review_status: null` have no workflow and never auto-flip.
 
 ---
 
@@ -1999,9 +2010,9 @@ Set or clear the `review_status` on a document. This is the atomic, single-purpo
 
 **Notes**
 
-- Bumps `review_status_updated_at` *only*; does **not** bump `updated_at`. That separation is why `documents_review_changes_since` is a clean polling signal — body/title/tag edits don't fire it.
+- Bumps `review_status_updated_at` and sets the status directly. Use this for explicit transitions (submit / approve / clear). Content edits via `document_update` to an in-review/approved doc also bump it (auto-`modified`).
 - Errors with `Document not found` if the id doesn't exist.
-- Status meanings: `in-review` = awaiting user; `approved` = user signed off; `modified` = user edited, reread before acting; `null` = clear.
+- Status meanings: `in-review` = awaiting user; `approved` = user signed off; `modified` = the doc changed since the agent last saw it — **re-read before acting** (set explicitly, or auto-set when an in-review/approved doc's content is edited); `null` = no workflow.
 
 ---
 
@@ -2031,7 +2042,7 @@ Polling primitive for agents waiting on user review. Returns every document whos
 **Notes**
 
 - Pair with the doc's `review_status_updated_at` field from a prior `document_create` / `document_set_review_status` call — record that timestamp, then periodically call this with it until the doc's status flips to `approved` or `modified`.
-- Because `document_update` of body/title/tags doesn't touch `review_status_updated_at`, this signal is false-positive free.
+- The signal fires on explicit status changes **and** when the user edits the content of a doc that's `in-review`/`approved` (which auto-flips it to `modified`). It does **not** fire for edits to docs with no review workflow (`review_status: null`), nor for no-op saves. So a hit always means "this doc you're tracking actually changed — re-read it."
 - Without `ids`, returns the global change list (useful for a single watcher coordinating multiple submissions).
 
 ---
