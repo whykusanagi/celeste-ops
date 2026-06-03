@@ -1,0 +1,10 @@
+{
+  "name": "celeste-ops-kit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CelesteOps agent kit — MCP shim + installer + docs for connecting LLM clients to the CelesteOps app",
+  "scripts": {
+    "install:mcp": "bun run scripts/install-mcp.ts"
+  }
+}
