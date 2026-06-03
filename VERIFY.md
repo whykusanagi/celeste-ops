@@ -1,7 +1,8 @@
 # Verifying a CelesteOps release
 
-Each release is PGP-signed for integrity and authorship, and the app is Apple
-Developer-ID codesigned and notarized so it opens without Gatekeeper warnings.
+Each release ships with a **PGP-signed `checksums.txt`**. That signature is the
+authenticity guarantee: it proves the download came from the maintainer and
+wasn't tampered with.
 
 Signing key:
 
@@ -35,16 +36,15 @@ shasum -a 256 -c checksums.txt                       # "OK"
 A "Good signature" in step 3 and "OK" in step 4 mean the download is authentic
 and untampered.
 
-## Confirm the app's code signature
+## Launching on macOS
 
-```bash
-codesign --verify --deep --strict --verbose=2 /Applications/CelesteOps.app
-spctl -a -t exec -vvv /Applications/CelesteOps.app   # "accepted", "Notarized Developer ID"
-```
+The build is ad-hoc signed (not yet notarized through Apple), so macOS
+quarantines it on first launch. After verifying above, unzip the app and either:
 
-If a build ever ships without notarization, macOS quarantines it on first launch.
-Right-click the app and choose Open, or clear the quarantine flag:
+- Right-click `CelesteOps.app` and choose **Open**, then **Open** again, or
+- Clear the quarantine flag:
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/CelesteOps.app
+  ```
 
-```bash
-xattr -dr com.apple.quarantine /Applications/CelesteOps.app
-```
+You do this once. A future release may be Apple-notarized, which removes the step.
