@@ -24,24 +24,28 @@ like Codex that block direct loopback.
 # 1. Vendor the shim's dependencies (once).
 cd server && npm install && cd ..
 
-# 2. In the app: Settings → Connections → Add Client. Copy the 6-digit pairing code.
+# 2. In the app: Settings → Connections → pick a product → Add Client.
+#    Copy the 6-digit code (it's bound to that one product).
 
-# 3. Enroll your clients and write their configs. Each gets its own token.
-bun run install:mcp --pair <code>
+# 3. Enroll THAT client and write its config. One client per run, single-use code.
+#    --client is one of: claude-code | claude-desktop | cursor | codex | celeste-cli
+bun run install:mcp --pair <code> --client claude-code
 
-# 4. Restart each client so it loads the new MCP server.
+# 4. Restart the client so it loads the new MCP server.
+#    Repeat steps 2-3 (fresh code each time) for any other clients.
 ```
 
-`install:mcp` detects which clients are installed and merges a `celeste-ops`
-server into each config (`.mcp.json`, `claude_desktop_config.json`,
-`~/.cursor/mcp.json`, `~/.codex/config.toml`, `~/.celeste/mcp.json`). It preserves
-your other servers and backs up each file before writing. Use `--dry-run` to
-preview and `--port <n>` for a non-default API port.
+`install:mcp --pair … --client <slug>` enrolls exactly one client and merges a
+`celeste-ops` server into its config (Claude Code → `~/.claude.json` user scope;
+others → `claude_desktop_config.json`, `~/.cursor/mcp.json`, `~/.codex/config.toml`,
+`~/.celeste/mcp.json`). It preserves your other servers and backs up each file
+before writing. Use `--dry-run` to preview and `--port <n>` for a non-default API port.
 
-Run it without `--pair` and the clients get wired but carry no token, so the app
-rejects them with a 401. Always pass `--pair <code>`. A code is valid for about
-five minutes and covers every client in one run; if `install:mcp` reports an
-invalid or expired code, generate a fresh one and re-run.
+A pairing code is **single-use** and bound to one product: each code enrolls one
+client, and re-running a spent code fails (no token sprawl). To wire several
+clients, generate a fresh code per client and re-run with the matching `--client`.
+Run `install:mcp` without `--pair`/`--client` to wire all detected clients with no
+token (the app then rejects them with a 401 until you pair them).
 
 Claude Desktop has a shortcut: drag `celeste-ops.mcpb` onto Settings → Extensions.
 
