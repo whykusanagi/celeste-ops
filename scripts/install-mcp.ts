@@ -170,8 +170,8 @@ const CODEX = join(HOME, '.codex', 'config.toml');
 const CELESTE = join(HOME, '.celeste', 'mcp.json');
 // Claude Code reads MCP servers from ~/.claude.json. The top-level `mcpServers`
 // map is USER scope — it loads in every project. Writing the token here (not
-// the repo-local .mcp.json) is what makes CelesteOps reachable from all of your
-// Claude Code sessions, not just one inside content-control.
+// a repo-local .mcp.json) is what makes CelesteOps reachable from all of your
+// Claude Code sessions, not just one project.
 const CLAUDE_CODE_USER = join(HOME, '.claude.json');
 
 /** Merge our server into ~/.claude.json's top-level (user-scope) mcpServers. */

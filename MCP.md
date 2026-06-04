@@ -827,7 +827,7 @@ Full-text search across task `title`, `description`, `tags`, `repo`, and `branch
       "status": "done",
       "tags": ["server", "sse"],
       "task_kind": "ai",
-      "repo": "content-control",
+      "repo": "my-repo",
       "branch": "fix/sse-idle-timeout",
       "snippet": "Bun.serve **idleTimeout** was 30s, SSE heartbeat …",
       "created_at": "…",
@@ -1979,7 +1979,7 @@ Returns every unique `folder` path used by documents, with usage counts. Use thi
   "folders": [
     { "folder": "",                "doc_count": 4 },
     { "folder": "celeste-cli",     "doc_count": 9 },
-    { "folder": "content-control", "doc_count": 12 },
+    { "folder": "my-repo", "doc_count": 12 },
     { "folder": "daily",           "doc_count": 31 },
     { "folder": "music",           "doc_count": 5 },
     { "folder": "reference",       "doc_count": 7 }
@@ -2115,7 +2115,7 @@ Use this at session start to scope into a specific project, or to surface cross-
   "count": 4,
   "projects": [
     {
-      "repo": "content-control",
+      "repo": "my-repo",
       "task_count": 47,
       "open_task_count": 12,
       "p0_count": 0,
