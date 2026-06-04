@@ -660,9 +660,10 @@ server.registerTool('calendar_get_month', {
 
 server.registerTool('documents_list', {
   title: 'List Documents',
-  description: 'List documents, most-recent-first, each with attachments[]. Returns {count, documents[]}. Pass folder to scope to a project: documents_list({ folder: "<repo>" }) returns that repo plus its sub-folders (e.g. <repo>/specs, <repo>/plans).',
+  description: 'List documents, most-recent-first, each with attachments[]. Returns {count, documents[]}. Pass folder to scope to a project: documents_list({ folder: "<repo>" }) returns that repo plus its sub-folders (e.g. <repo>/specs, <repo>/plans). Pass review_status to filter by approval state (e.g. "in-review").',
   inputSchema: {
     folder: z.string().optional(),
+    review_status: ReviewStatusSchema.optional(),
   },
 }, async (filter) => {
   const r = await api('GET', `/api/documents${qs(filter)}`);
