@@ -51,12 +51,14 @@ Claude Desktop has a shortcut: drag `celeste-ops.mcpb` onto Settings → Extensi
 
 ## Install the agent skill (optional)
 
-The MCP tools work on their own. To also give an agent the `celesteops-tasks`
-skill (it teaches the agent how to read and write CelesteOps tasks), copy it into
-the client's skills directory. For Claude Code:
+The MCP tools work on their own. Two optional skills teach an agent the common
+CelesteOps workflows — `celesteops-tasks` (read/write tasks and documents) and
+`celesteops-review` (work the pending-review queue read-only). Copy whichever you
+want into the client's skills directory. For Claude Code:
 
 ```bash
-cp -r skills/celesteops-tasks ~/.claude/skills/
+cp -r skills/celesteops-tasks  ~/.claude/skills/
+cp -r skills/celesteops-review ~/.claude/skills/
 ```
 
 This skill format is for Claude Code and Claude Desktop. Cursor, Codex, and
@@ -73,3 +75,5 @@ any token there, and set an expiry. The list updates as clients connect.
 - [`VERIFY.md`](./VERIFY.md): verify a downloaded release with PGP.
 - [`skills/celesteops-tasks`](./skills/celesteops-tasks): a skill that teaches an
   agent to read and write CelesteOps tasks.
+- [`skills/celesteops-review`](./skills/celesteops-review): a read-only skill for
+  working the pending-review queue (specs, plans, pipeline).
