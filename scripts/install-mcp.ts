@@ -30,9 +30,12 @@ const HOME = homedir();
 const argv = process.argv.slice(2);
 const DRY = argv.includes('--dry-run');
 if (argv.includes('--help') || argv.includes('-h')) {
-  console.log('Usage: bun run install:mcp [--dry-run] [--port <n>] [--pair <code>]');
-  console.log('  --pair <code>  enroll each client with a pairing code from the app');
-  console.log('                 (Settings → Connections → Add Client) so they authenticate.');
+  console.log('Usage: bun run install:mcp [--dry-run] [--port <n>] [--pair <code>] [--client <slug>]');
+  console.log('  --pair <code>    enroll ONE client with a pairing code from the app');
+  console.log('                   (Settings → Connections → pick a product → Add Client).');
+  console.log('  --client <slug>  which client to enroll/wire (required with --pair):');
+  console.log('                   claude-code | claude-desktop | cursor | codex | celeste-cli');
+  console.log('                   Omit --pair and --client to wire all detected clients (no tokens).');
   process.exit(0);
 }
 const portArg = argv.indexOf('--port');
@@ -55,6 +58,9 @@ if (!existsSync(SHIM)) {
 }
 
 const PAIR = (() => { const i = argv.indexOf('--pair'); return i !== -1 && argv[i + 1] ? argv[i + 1] : null; })();
+// --client <slug> selects exactly ONE client to enroll/wire. Required with
+// --pair so one pairing code mints exactly one token (no fan-out, no sprawl).
+const CLIENT = (() => { const i = argv.indexOf('--client'); return i !== -1 && argv[i + 1] ? argv[i + 1].toLowerCase() : null; })();
 const API = `http://127.0.0.1:${PORT}`;
 
 // Enroll a client with the pairing code shown in the app's Connections panel
@@ -162,37 +168,110 @@ const CLAUDE_DESKTOP = join(HOME, 'Library', 'Application Support', 'Claude', 'c
 const CURSOR = join(HOME, '.cursor', 'mcp.json');
 const CODEX = join(HOME, '.codex', 'config.toml');
 const CELESTE = join(HOME, '.celeste', 'mcp.json');
+// Claude Code reads MCP servers from ~/.claude.json. The top-level `mcpServers`
+// map is USER scope — it loads in every project. Writing the token here (not
+// the repo-local .mcp.json) is what makes CelesteOps reachable from all of your
+// Claude Code sessions, not just one inside content-control.
+const CLAUDE_CODE_USER = join(HOME, '.claude.json');
+
+/** Merge our server into ~/.claude.json's top-level (user-scope) mcpServers. */
+function upsertClaudeCodeUserScope(token: string | null): Result {
+  if (!existsSync(CLAUDE_CODE_USER)) {
+    // No user config yet — create a minimal one carrying just our server.
+    return backupAndWrite(CLAUDE_CODE_USER, JSON.stringify({ mcpServers: { [SERVER_NAME]: makeJsonEntry(token) } }, null, 2) + '\n');
+  }
+  let cfg: Record<string, any> = {};
+  try {
+    cfg = JSON.parse(readFileSync(CLAUDE_CODE_USER, 'utf8'));
+  } catch (e) {
+    console.error(`  ! ${CLAUDE_CODE_USER} is not valid JSON — leaving it untouched (${e})`);
+    return 'skipped';
+  }
+  cfg.mcpServers ??= {};
+  cfg.mcpServers[SERVER_NAME] = makeJsonEntry(token);
+  // Also prune any stale repo-local project entry inside ~/.claude.json so the
+  // project scope can't shadow user scope with an older/tokenless server.
+  if (cfg.projects?.[REPO_ROOT]?.mcpServers?.[SERVER_NAME]) {
+    delete cfg.projects[REPO_ROOT].mcpServers[SERVER_NAME];
+  }
+  const r = backupAndWrite(CLAUDE_CODE_USER, JSON.stringify(cfg, null, 2) + '\n');
+  pruneRepoMcpJson(); // remove the standalone <repo>/.mcp.json celeste-ops entry too
+  return r;
+}
+
+/**
+ * Remove our server from the repo-local <repo>/.mcp.json (Claude Code project
+ * scope). Project scope OVERRIDES user scope inside the repo, so a stale token
+ * there would shadow the user-scope one we just wrote. Leaves other servers and
+ * the file (if it has them) intact; deletes the key only.
+ */
+function pruneRepoMcpJson(): void {
+  const file = join(REPO_ROOT, '.mcp.json');
+  if (!existsSync(file) || DRY) return;
+  let cfg: Record<string, any>;
+  try { cfg = JSON.parse(readFileSync(file, 'utf8')); } catch { return; }
+  if (!cfg.mcpServers?.[SERVER_NAME]) return;
+  delete cfg.mcpServers[SERVER_NAME];
+  if (existsSync(file) && lstatSync(file).isSymbolicLink()) return; // never follow a symlink
+  if (!existsSync(`${file}.bak`)) copyFileSync(file, `${file}.bak`);
+  writeFileSync(file, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
+  console.log(`  · pruned   ${SERVER_NAME} from repo-local ${file} (project scope would shadow user scope)`);
+}
 
 // Each target enrolls its own token (when --pair is given) before writing, so
-// every client authenticates independently and can be revoked on its own.
-const targets: Array<{ name: string; file: string; run: () => Promise<Result>; note?: string }> = [
+// every client authenticates independently and can be revoked on its own. The
+// `slug` matches the UI product list and the --client flag — exactly one slug
+// is enrolled per --pair run (one code → one token).
+const targets: Array<{ slug: string; name: string; file: string; run: () => Promise<Result>; note?: string }> = [
   {
+    slug: 'claude-code',
     name: 'Claude Code',
-    file: join(REPO_ROOT, '.mcp.json'),
-    run: async () => upsertJson(join(REPO_ROOT, '.mcp.json'), true, await enroll('Claude Code')),
+    file: CLAUDE_CODE_USER,
+    run: async () => upsertClaudeCodeUserScope(await enroll('Claude Code')),
+    note: 'user scope (~/.claude.json) — loads in every project',
   },
   {
+    slug: 'claude-desktop',
     name: 'Claude Desktop',
     file: CLAUDE_DESKTOP,
     run: async () => (existsSync(CLAUDE_DESKTOP) ? upsertJson(CLAUDE_DESKTOP, false, await enroll('Claude Desktop')) : 'skipped'),
     note: 'or install celeste-ops.mcpb directly (preferred for Desktop)',
   },
   {
+    slug: 'cursor',
     name: 'Cursor',
     file: CURSOR,
     run: async () => (existsSync(join(HOME, '.cursor')) ? upsertJson(CURSOR, true, await enroll('Cursor')) : 'skipped'),
   },
   {
+    slug: 'codex',
     name: 'Codex',
     file: CODEX,
     run: async () => (existsSync(CODEX) ? upsertToml(CODEX, await enroll('Codex')) : 'skipped'),
   },
   {
+    slug: 'celeste-cli',
     name: 'Celeste CLI',
     file: CELESTE,
     run: async () => (existsSync(join(HOME, '.celeste')) ? upsertJson(CELESTE, true, await enroll('Celeste CLI')) : 'skipped'),
   },
 ];
+
+// --client picks exactly one target; required with --pair so a pairing code
+// never fans out to multiple clients. The label sent to enroll is taken from
+// the matched target's `name` (and the UI-bound label wins server-side anyway).
+const SLUGS = targets.map((t) => t.slug);
+if (CLIENT && !SLUGS.includes(CLIENT)) {
+  console.error(`✗ unknown --client ${JSON.stringify(CLIENT)} (expected: ${SLUGS.join(' | ')})`);
+  process.exit(1);
+}
+if (PAIR && !CLIENT) {
+  console.error('✗ --pair requires --client <slug> so one code enrolls exactly one client.');
+  console.error(`  e.g. bun run install:mcp --pair ${PAIR} --client claude-code`);
+  console.error(`  slugs: ${SLUGS.join(' | ')}`);
+  process.exit(1);
+}
+const selectedTargets = CLIENT ? targets.filter((t) => t.slug === CLIENT) : targets;
 
 console.log(`CelesteOps MCP install${DRY ? ' (dry-run)' : ''}`);
 console.log(`  shim : ${SHIM}`);
@@ -205,9 +284,9 @@ const icon: Record<Result, string> = {
   unchanged: '· unchanged  ',
   skipped: '– skipped    ',
 };
-console.log(`  pair : ${PAIR ? 'yes (enrolling tokens)' : 'no — clients will NOT authenticate'}\n`);
+console.log(`  pair : ${PAIR ? `yes — enrolling ${CLIENT} only` : 'no — clients will NOT authenticate'}\n`);
 let touched = 0;
-for (const t of targets) {
+for (const t of selectedTargets) {
   const r = await t.run();
   if (r === 'wrote' || r === 'would-write') touched++;
   const reason = r === 'skipped' ? ' (client not installed)' : t.note ? ` — ${t.note}` : '';
@@ -222,8 +301,8 @@ if (DRY) {
   console.log('The CelesteOps app must be running (the shim talks to its HTTP API).');
   if (!PAIR) {
     console.log('\n⚠  No --pair: clients have no token and the app will reject them (401).');
-    console.log('   In the app: Settings → Connections → Add Client → copy the code, then re-run:');
-    console.log('   bun run install:mcp --pair <code>');
+    console.log('   In the app: Settings → Connections → pick a product → Add Client → copy the code, then re-run:');
+    console.log('   bun run install:mcp --pair <code> --client <slug>');
   }
 } else {
   console.log('Everything already up to date.');

@@ -13,7 +13,34 @@ that affects repo B, leave a task tagged for repo B so the next agent there sees
 Use the `celeste-ops` MCP tools when they're available (they're typed and
 validated). HTTP is the fallback; examples below use it.
 
+## 0. Authentication
+
+The HTTP API enforces token-trust auth: every `/api/*` endpoint **except
+`/health`** requires a bearer token, so a bare `curl .../api/tasks` returns
+`401 authentication required`. Two ways in:
+
+- **MCP tools (preferred).** The `celeste-ops` MCP shim injects the token for
+  you, so `tasks_list`, `task_create`, etc. need no auth handling. Use these
+  whenever they're available.
+- **HTTP fallback.** Read the token from your client's MCP config and send it as
+  a bearer header. Claude Code stores it in `~/.claude.json`:
+
+  ```bash
+  TOKEN=$(node -e "try{const c=require(require('os').homedir()+'/.claude.json');process.stdout.write(c.mcpServers?.['celeste-ops']?.env?.CELESTE_OPS_TOKEN||'')}catch{}")
+  curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:43121/api/tasks
+  ```
+
+  Reuse `-H "Authorization: Bearer $TOKEN"` on every `/api/*` call below. An empty
+  `$TOKEN` means this client isn't paired — run
+  `bun run install:mcp --pair <code> --client <slug>` (see INSTALL.md). Don't keep
+  retrying unauthenticated.
+
+The `/api/auth/*` client-management endpoints are first-party only (the desktop
+app's own UI); an MCP-client token gets `403` there by design.
+
 ## 1. Confirm the app is running
+
+`/health` is the one endpoint that needs no token — use it as the liveness probe:
 
 ```bash
 curl -s http://127.0.0.1:43121/health
@@ -29,12 +56,13 @@ the user to launch it. Don't start it yourself.
    actionable, or `tag:"<theme>"` for cross-cutting work.
 3. `documents_list({ folder: "<repo>" })` — its specs, plans, notes, and drafts.
 
-Over HTTP: `GET /api/tasks?repo=<repo>&status=todo`, `GET /api/documents?folder=<repo>`.
+Over HTTP (with the bearer header from §0): `GET /api/tasks?repo=<repo>&status=todo`, `GET /api/documents?folder=<repo>`.
 
 ## 3. Create a task
 
 ```bash
 curl -s -X POST http://127.0.0.1:43121/api/tasks \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
   -d '{
     "title": "Sync baseline in repo-b to match repo-a abc1234",
@@ -61,6 +89,7 @@ Field rules:
 
 ```bash
 curl -s -X PATCH http://127.0.0.1:43121/api/tasks/<id> \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' -d '{"status":"doing"}'
 ```
 

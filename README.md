@@ -30,8 +30,9 @@ private; here you get the built app plus what a client needs to connect to it.
 2. Clone this repo, then connect your clients ([INSTALL.md](./INSTALL.md) has the detail):
    ```bash
    cd server && npm install && cd ..
-   # In the app: Settings → Connections → Add Client, then copy the code.
-   bun run install:mcp --pair <code>
+   # In the app: Settings → Connections → pick a product → Add Client, copy the code.
+   # One client per run — pass the matching --client slug:
+   bun run install:mcp --pair <code> --client claude-code
    ```
 
 ## License
