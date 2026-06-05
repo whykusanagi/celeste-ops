@@ -9,19 +9,19 @@ Use this skill when CelesteOps is the source of truth for review state. The goal
 
 ## Quick start
 
-1. Confirm the session exposes CelesteOps MCP tools. Tool names may be namespaced; match by suffixes such as `documents_pending_review`, `document_get`, `document_set_review_status`, `documents_search`, `documents_for_entity`, `document_backlinks`, `tasks_search`, `tasks_list`, `projects_list`, and `pipeline_list`.
+1. Confirm the session exposes CelesteOps MCP tools. Tool names may be namespaced; match by suffixes such as `documents_pending_review`, `documents_pending_decisions`, `document_get`, `document_set_review_status`, `document_decision_resolve`, `documents_search`, `documents_for_entity`, `document_backlinks`, `tasks_search`, `tasks_list`, `projects_list`, and `pipeline_list`.
 2. If CelesteOps tools are not available, inspect `../../README.md` for the MCP connection shape and tell the user the skill cannot operate the review queue until the MCP is attached. Do not mutate SQLite directly as a substitute.
-3. For document review, start with `documents_pending_review`.
+3. For document review, start with `documents_pending_review` **and** `documents_pending_decisions` — a doc can wait on a user choice (an agent-authored decision) without being in the review-status queue.
 4. For repo-scoped review, also call `projects_list` and then the relevant task or document search tools.
 5. For content-pipeline review rather than document approval, start with `pipeline_list`.
 
 ## Review rules
 
-- Read the full document with `document_get` before recommending approval or modification.
+- Read the full document with `document_get` before recommending approval or modification. `document_get` returns `{document, comments, decisions}` — read the embedded reasoning chain (agent comments + any open/resolved decisions) so you summarize the doc and its unresolved choices together.
 - Pull surrounding context with `documents_for_entity`, `document_backlinks`, `tasks_search`, or `tasks_list` when a doc references a task, repo, feature, or prior plan.
 - Treat CelesteOps as the workflow system of record. If auxiliary MCP tools such as `celeste_index` or `celeste_code_review` are available, use them only to validate claims or inspect referenced code; do not let them replace the CelesteOps review state.
 - Summarize review items in operator language: what this is, what decision is being requested, notable risks, and the recommended next action.
-- Only call `document_set_review_status` when the user explicitly asks to approve, mark modified, clear review state, or submit something for review.
+- Only call `document_set_review_status` when the user explicitly asks to approve, mark modified, clear review state, or submit something for review. The same rule covers `document_decision_resolve` (picking the chosen option / leaving a resolution note) and approve-with-note: these record the user's decision, so perform them only on explicit instruction. When the user approves or marks-modified with a reason, pass that reason as the note so it is filed as a comment on the status change.
 - Avoid destructive cleanup during review. Prefer updating status or leaving notes over deleting docs or tasks.
 
 ## Deep references
@@ -32,5 +32,5 @@ Use this skill when CelesteOps is the source of truth for review state. The goal
 If you need a narrow section from `MCP.md`, search it first:
 
 ```bash
-rg -n "documents_pending_review|documents_review_changes_since|document_set_review_status|document_get|documents_for_entity|document_backlinks|projects_list|pipeline_list|tasks_search" ../../MCP.md
+rg -n "documents_pending_review|documents_pending_decisions|documents_review_changes_since|document_set_review_status|document_decision_resolve|document_get|documents_for_entity|document_backlinks|projects_list|pipeline_list|tasks_search" ../../MCP.md
 ```

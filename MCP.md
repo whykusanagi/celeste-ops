@@ -1,8 +1,8 @@
 # CelesteOps MCP Server
 
-This document is the single source of truth for any LLM operating the CelesteOps MCP server. It covers what the system is, how to connect, every data entity, all business rules, all 56 tools with full input/output documentation, recommended workflows, example prompts, and error handling. Read this document fully before making any tool calls.
+This document is the single source of truth for any LLM operating the CelesteOps MCP server. It covers what the system is, how to connect, every data entity, all business rules, all 68 tools with full input/output documentation, recommended workflows, example prompts, and error handling. Read this document fully before making any tool calls.
 
-> **Tool count:** the shim exposes **56** tools. Confirm what your client sees after connecting — Claude Code: `/mcp`; Celeste CLI: the TUI's MCP panel.
+> **Tool count:** the shim exposes **68** tools. Confirm what your client sees after connecting — Claude Code: `/mcp`; Celeste CLI: the TUI's MCP panel.
 
 ---
 
@@ -28,6 +28,7 @@ This document is the single source of truth for any LLM operating the CelesteOps
    - [Documents](#group-12-documents)
    - [Daily Notes](#group-13-daily-notes)
    - [Projects & Tags](#group-14-projects--tags)
+   - [Prototypes](#group-15-prototypes)
 7. [Example Prompts](#example-prompts)
 8. [Error Handling](#error-handling)
 
@@ -49,7 +50,7 @@ CelesteOps manages:
 All data lives in a local SQLite database. There are two front-ends over the same database layer, both entirely local:
 
 - **The app's HTTP API**, hosted by the running desktop app on `127.0.0.1:43121`. This is the single writer — its UI live-updates as changes land.
-- **A stdio MCP shim** (`server/index.js` in this kit), which exposes all 56 tools over the Model Context Protocol and forwards each call to that HTTP API. This is what MCP clients (Claude Code, Claude Desktop, Cursor, Codex, …) connect to.
+- **A stdio MCP shim** (`server/index.js` in this kit), which exposes all 68 tools over the Model Context Protocol and forwards each call to that HTTP API. This is what MCP clients (Claude Code, Claude Desktop, Cursor, Codex, …) connect to.
 
 ---
 
@@ -79,7 +80,7 @@ bun run install:mcp                 # detect installed clients and wire them up
 
 This merges a `celeste-ops` MCP server into each detected client's config — **Claude Code** (`.mcp.json`), **Claude Desktop** (`claude_desktop_config.json`), **Cursor** (`~/.cursor/mcp.json`), **Codex** (`~/.codex/config.toml`), and **Celeste CLI** (`~/.celeste/mcp.json`) — preserving any other servers and backing up each file to `<file>.bak`. Use `--dry-run` to preview, `--port <n>` for a non-default API port. Restart each client afterward. **The CelesteOps app must be running** (the shim talks to its HTTP API).
 
-> **Celeste CLI note:** external MCP servers are loaded only by the interactive `celeste chat` TUI (not `message`/`agent`/`serve`). On launch it connects to the shim and registers all 56 tools — confirm in the TUI's MCP panel.
+> **Celeste CLI note:** external MCP servers are loaded only by the interactive `celeste chat` TUI (not `message`/`agent`/`serve`). On launch it connects to the shim and registers all 68 tools — confirm in the TUI's MCP panel.
 
 For Claude Desktop, the packaged `celeste-ops.mcpb` bundle is the preferred one-click path (drag onto **Settings → Extensions**).
 
@@ -578,7 +579,7 @@ Restore is available only via the desktop app UI (Settings → Backup History �
 
 ## Tool Reference
 
-All 56 tools are documented below in groups. Every tool returns a JSON object serialized as a text content block. Parse the `text` field of the first content item as JSON.
+All 68 tools are documented below in groups. Every tool returns a JSON object serialized as a text content block. Parse the `text` field of the first content item as JSON.
 
 Response envelope shape for all tools:
 
@@ -1779,7 +1780,11 @@ Fetches a single document by id.
 |---|---|---|---|
 | `id` | `string` (UUID) | Yes | Document id from `documents_list` or `document_create`. |
 
-**Returns** `{ "document": Document }`. Errors with `Document not found` if the id doesn't exist.
+**Returns** `{ "document": Document, "comments": [DocumentComment, …], "decisions": [DocumentDecision, …] }`. The response now embeds the doc's full comment chain (the reasoning log) and its decisions (open/resolved/cancelled) alongside the Document, so one call gives the complete review context. Errors with `Document not found` if the id doesn't exist.
+
+**Notes**
+
+- `comments` is chronological (oldest first); `decisions` carries every decision regardless of status. Use `document_comments_list` / `documents_pending_decisions` if you only need one or the other.
 
 ---
 
@@ -2047,6 +2052,141 @@ Polling primitive for agents waiting on user review. Returns every document whos
 
 ---
 
+#### Decisions & comments (the reasoning chain)
+
+The review workflow above (`document_set_review_status` / `documents_pending_review` / `documents_review_changes_since`) tracks a single approve / modify signal. The tools below layer two finer-grained channels onto the same document, both surfaced in the doc's Review panel and embedded in `document_get`:
+
+- **Comments** — immutable, free-form remarks appended to a doc (the reasoning log). Comments added via MCP are authored as `"agent"`; the user's own comments are `"user"`. A comment that accompanies an approve/modified action carries that `review_status`.
+- **Decisions** — structured questions (a prompt + 2 or more options) handed to the user to pick from. Poll for the resolution the same way you poll for review state, then read the chosen option + note back off the document. This is the decision counterpart of the review-status workflow: where `review_status` answers "is this approved?", a decision answers "which of these alternatives?".
+
+---
+
+#### `document_comment_add`
+
+Append an immutable, free-form comment to a document — a remark or explanation that joins the doc's reasoning chain. For a question that needs the user to choose between alternatives, use `document_decision_create` instead.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `document_id` | `string` (UUID) | Yes | Document to comment on. |
+| `body` | `string` (min 1) | Yes | Comment text. |
+
+**Returns** `{ "comment": DocumentComment }`.
+
+**Notes**
+
+- Comments are immutable — there is no edit/delete tool.
+- Author is recorded as `"agent"` when added via MCP. User comments (authored `"user"`) come from the desktop UI.
+
+---
+
+#### `document_comments_list`
+
+Lists a document's comments in chronological order (oldest first) — the reasoning chain for that doc.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `document_id` | `string` (UUID) | Yes | Document whose comments to list. |
+
+**Returns** `{ "comments": [DocumentComment, …] }`.
+
+**Notes**
+
+- Each `DocumentComment` is `{ id, document_id, author: 'user' | 'agent', body, review_status: 'in-review' | 'approved' | 'modified' | null, created_at }`. `review_status` is set only when the comment accompanied an approve/modified action.
+- `document_get` already embeds this list in its `comments` field.
+
+---
+
+#### `document_decision_create`
+
+Attach a structured decision to a document: a prompt plus 2 or more options for the user to pick from. Use this when handing off a spec/plan and you need the user to choose between alternatives rather than just approve or reject.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `document_id` | `string` (UUID) | Yes | Document the decision belongs to. |
+| `prompt` | `string` (min 1) | Yes | The question to ask the user. |
+| `options` | `[{ label: string, description?: string }]` | Yes | At least **2** options. Each option's `id` is generated server-side and returned. |
+
+**Returns** `{ "decision": DocumentDecision }` with the option ids populated.
+
+**Notes**
+
+- Poll `documents_decision_changes_since` (or `documents_pending_decisions`) to learn when the user resolves it, then call `document_get` for the chosen option + resolution note.
+- A decision is the "pick one" counterpart to the approve/modify review signal.
+
+---
+
+#### `document_decision_resolve`
+
+Resolves an open decision by choosing an option and/or leaving a note. Primarily a user action via the UI; exposed here for tests and delegated answering.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (UUID) | Yes | Decision id (from `document_decision_create`, `documents_pending_decisions`, or `document_get`). |
+| `chosen_option_id` | `string` | No | The picked option's id. |
+| `resolution_note` | `string` | No | Free-text note. |
+
+At least one of `chosen_option_id` / `resolution_note` is required.
+
+**Returns** `{ "decision": DocumentDecision }` (now `status: "resolved"` with `resolved_at` set).
+
+---
+
+#### `document_decision_cancel`
+
+Cancels an open decision you no longer need answered (e.g. you revised the spec and the question is moot). The decision is kept for the record with its original prompt and options.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (UUID) | Yes | Decision id to cancel. |
+
+**Returns** `{ "decision": DocumentDecision }` (now `status: "cancelled"`).
+
+---
+
+#### `documents_pending_decisions`
+
+Returns every document that has at least one open (unresolved) decision, with those decisions. The decision counterpart of `documents_pending_review` — use it at session start to find what choices the user still owes an answer on.
+
+**Inputs**: none.
+
+**Returns** `{ "count": N, "pending": [{ "document": Document, "decisions": [DocumentDecision, …] }] }`.
+
+**Notes**
+
+- Only docs with ≥1 `status: "open"` decision appear; the `decisions` array lists that doc's decisions.
+
+---
+
+#### `documents_decision_changes_since`
+
+Polling primitive for agents waiting on a decision. Returns every document whose decisions changed — created, resolved, or cancelled — at or after the given ISO timestamp. Mirrors `documents_review_changes_since`.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `since` | `string` (ISO timestamp) | Yes | e.g. `"2026-06-04T07:30:00.000Z"`. Returns docs with a decision change at/after this. |
+| `ids` | `string[]` | No | Optional: filter to this set of document ids (the typical flow scopes the poll to the doc(s) you submitted a decision on). |
+
+**Returns** `{ "count": N, "documents": [Document, …] }`.
+
+**Notes**
+
+- After creating a decision, record the time, then poll this until the doc shows up; then call `document_get` to read the resolved choice + note.
+- Without `ids`, returns the global change list.
+
+---
+
 ### Group 13: Daily Notes
 
 Auto-generated per-day documents seeded from that day's dashboard. After first access the body belongs to the user.
@@ -2159,6 +2299,136 @@ Returns every unique tag across documents and tasks with usage counts. Useful fo
 
 - Sorted by `total DESC`, then alphabetical.
 - A tag with `total: 1` is usually a singleton; consider consolidating or deleting it.
+
+---
+
+### Group 15: Prototypes
+
+A **prototype** is a stored, self-contained HTML artifact (it may include inline CSS and JS). It is embedded in a document via a fenced code block whose language is `prototype` and whose body is the prototype's id (optionally followed by `height=NNN` for the iframe height):
+
+````
+```prototype
+<prototype-id>
+height=480
+```
+````
+
+**Security model (read before authoring):** a prototype renders inside `<iframe sandbox="allow-scripts" srcdoc=…>` — a **null origin** (no `allow-same-origin`), so it cannot reach the local API, the auth token, cookies, or the parent page. An injected CSP (`default-src 'none'; … connect-src 'none'`) blocks **all** network requests; images/styles/fonts may only load from a user-managed host allowlist (Settings → `prototype_allowlisted_hosts`). The server stores the HTML **verbatim and does not sanitize it** — the sandbox + CSP is the control. A prototype must be **approved by the user in the UI** before it first renders; approval is bound to a content hash, so editing the html re-arms the gate. **There is no `prototype_approve` MCP tool** — an authoring agent cannot approve its own prototype. See `docs/SECURITY-SPEC.md` §7.
+
+---
+
+#### `prototype_create`
+
+Creates a self-contained HTML artifact that can be embedded in a document via a ```prototype fenced block containing the returned id. The HTML may include inline CSS and JS. The **user** must approve it in the UI before it first renders — you cannot approve your own prototype.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `title` | `string` (min 1) | Yes | Human-readable title shown in the management UI. |
+| `html` | `string` (min 1) | Yes | The self-contained HTML document. Stored verbatim; rendered in a sandboxed iframe. |
+| `tags` | `string[]` | No | Labels for filtering. Defaults to `[]`. |
+
+**Returns**
+
+```json
+{
+  "prototype": Prototype
+}
+```
+
+**Notes**
+
+- The created prototype is **unapproved**; it will not render until the user approves it. Poll `prototype_get` to learn when that happens.
+
+---
+
+#### `prototype_update`
+
+Patches a prototype's `title`, `html`, and/or `tags`. At least one field is required. Editing `html` **re-arms the approval gate** — the user must re-approve before the new version renders. Cannot set approval (user-only).
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (min 1) | Yes | Prototype ID to patch. |
+| `title` | `string` (min 1) | No | New title. |
+| `html` | `string` (min 1) | No | New HTML. Changing this clears the prior approval. |
+| `tags` | `string[]` | No | Replacement tag array. |
+
+**Returns**
+
+```json
+{
+  "prototype": Prototype
+}
+```
+
+**Notes**
+
+- An empty patch (no fields) is rejected.
+
+---
+
+#### `prototype_get`
+
+Fetches a prototype by id, including its `html` and current approval state.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (min 1) | Yes | Prototype ID. |
+
+**Returns**
+
+```json
+{
+  "prototype": Prototype,
+  "approved": true
+}
+```
+
+**Notes**
+
+- `approved` is `true` only when the user has signed off on the **current** html. Poll this to learn when the user approves your prototype.
+
+---
+
+#### `prototype_list`
+
+Lists all prototypes, newest first.
+
+**Inputs**: none.
+
+**Returns**
+
+```json
+{
+  "count": 3,
+  "prototypes": [Prototype, ...]
+}
+```
+
+---
+
+#### `prototype_delete`
+
+Permanently deletes a prototype by id. Irreversible.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (min 1) | Yes | Prototype ID to delete. |
+
+**Returns**
+
+```json
+{
+  "deleted": "uuid-string"
+}
+```
 
 ---
 

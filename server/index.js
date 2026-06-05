@@ -581,6 +581,48 @@ server.registerTool('asset_delete', {
   inputSchema: { id: z.string().min(1) },
 }, async ({ id }) => textResult(await api('DELETE', `/api/assets/${encodeURIComponent(id)}`)));
 
+// ---- Prototypes --------------------------------------------------------------
+
+server.registerTool('prototype_create', {
+  title: 'Create Prototype',
+  description: 'Create an HTML prototype artifact (embed it in a doc via a ```prototype block with the returned id). User must approve before first render. Returns {prototype}.',
+  inputSchema: { title: z.string().min(1), html: z.string().min(1), tags: z.array(z.string()).optional() },
+}, async ({ title, html, tags }) =>
+  textResult(await api('POST', '/api/prototypes', { title, html, tags: tags ?? [] })));
+
+server.registerTool('prototype_update', {
+  title: 'Update Prototype',
+  description: 'Patch a prototype (title/html/tags). Editing html re-arms approval. Returns {prototype}.',
+  inputSchema: { id: z.string().min(1), title: z.string().min(1).optional(), html: z.string().min(1).optional(), tags: z.array(z.string()).optional() },
+}, async ({ id, title, html, tags }) => {
+  const patch = {};
+  if (title !== undefined) patch.title = title;
+  if (html !== undefined) patch.html = html;
+  if (tags !== undefined) patch.tags = tags;
+  return textResult(await api('PATCH', `/api/prototypes/${encodeURIComponent(id)}`, patch));
+});
+
+server.registerTool('prototype_get', {
+  title: 'Get Prototype',
+  description: 'Fetch a prototype by id (incl html + approval state + csp). Returns {prototype, approved, csp}.',
+  inputSchema: { id: z.string().min(1) },
+}, async ({ id }) => textResult(await api('GET', `/api/prototypes/${encodeURIComponent(id)}`)));
+
+server.registerTool('prototype_list', {
+  title: 'List Prototypes',
+  description: 'List all prototypes (newest first). Returns {count, prototypes}.',
+  inputSchema: {},
+}, async () => {
+  const r = await api('GET', '/api/prototypes');
+  return textResult({ count: r.prototypes.length, prototypes: r.prototypes });
+});
+
+server.registerTool('prototype_delete', {
+  title: 'Delete Prototype',
+  description: 'Delete a prototype by id. Irreversible. Returns {deleted: id}.',
+  inputSchema: { id: z.string().min(1) },
+}, async ({ id }) => textResult(await api('DELETE', `/api/prototypes/${encodeURIComponent(id)}`)));
+
 // ---- Scheduled posts ---------------------------------------------------------
 
 server.registerTool('scheduled_post_create', {
@@ -672,7 +714,7 @@ server.registerTool('documents_list', {
 
 server.registerTool('document_get', {
   title: 'Get Document',
-  description: 'Fetch a single document by id. Returns {document}. Errors 404 if not found.',
+  description: 'Fetch a single document by id. Returns {document, comments, decisions}. Errors 404 if not found.',
   inputSchema: { id: z.string().min(1) },
 }, async ({ id }) => textResult(await api('GET', `/api/documents/${encodeURIComponent(id)}`)));
 
@@ -798,6 +840,63 @@ server.registerTool('documents_review_changes_since', {
   },
 }, async ({ since, ids }) => {
   const r = await api('GET', `/api/documents/review-changes${qs({ since, ids: ids ? ids.join(',') : undefined })}`);
+  return textResult({ count: r.documents.length, documents: r.documents });
+});
+
+server.registerTool('document_comment_add', {
+  title: 'Add Document Comment',
+  description: 'Append a free-form comment to a document (author recorded as "agent"). Returns {comment}.',
+  inputSchema: { document_id: z.string().min(1), body: z.string().min(1) },
+}, async ({ document_id, body }) =>
+  textResult(await api('POST', `/api/documents/${encodeURIComponent(document_id)}/comments`, { body, author: 'agent' })));
+
+server.registerTool('document_comments_list', {
+  title: 'List Document Comments',
+  description: 'List a document\'s comments in chronological order. Returns {comments}.',
+  inputSchema: { document_id: z.string().min(1) },
+}, async ({ document_id }) =>
+  textResult(await api('GET', `/api/documents/${encodeURIComponent(document_id)}/comments`)));
+
+server.registerTool('document_decision_create', {
+  title: 'Create Document Decision',
+  description: 'Attach a decision (prompt + 2+ options) to a document. Returns {decision} with generated option ids.',
+  inputSchema: {
+    document_id: z.string().min(1),
+    prompt: z.string().min(1),
+    options: z.array(z.object({ label: z.string().min(1), description: z.string().optional() })).min(2),
+  },
+}, async ({ document_id, prompt, options }) =>
+  textResult(await api('POST', `/api/documents/${encodeURIComponent(document_id)}/decisions`, { prompt, options })));
+
+server.registerTool('document_decision_resolve', {
+  title: 'Resolve Document Decision',
+  description: 'Resolve an open decision with a chosen option and/or note (at least one). Returns {decision}.',
+  inputSchema: { id: z.string().min(1), chosen_option_id: z.string().optional(), resolution_note: z.string().optional() },
+}, async ({ id, chosen_option_id, resolution_note }) =>
+  textResult(await api('POST', `/api/decisions/${encodeURIComponent(id)}/resolve`, { chosen_option_id, resolution_note })));
+
+server.registerTool('document_decision_cancel', {
+  title: 'Cancel Document Decision',
+  description: 'Cancel an open decision. Returns {decision}.',
+  inputSchema: { id: z.string().min(1) },
+}, async ({ id }) =>
+  textResult(await api('POST', `/api/decisions/${encodeURIComponent(id)}/cancel`, {})));
+
+server.registerTool('documents_pending_decisions', {
+  title: 'Documents Pending Decisions',
+  description: 'Every document with at least one open decision. Returns {count, pending}.',
+  inputSchema: {},
+}, async () => {
+  const r = await api('GET', '/api/documents/pending-decisions');
+  return textResult({ count: r.pending.length, pending: r.pending });
+});
+
+server.registerTool('documents_decision_changes_since', {
+  title: 'Documents Decision Changes Since',
+  description: 'Documents whose decisions changed at/after an ISO timestamp. Returns {count, documents}.',
+  inputSchema: { since: z.string().min(1), ids: z.array(z.string()).optional() },
+}, async ({ since, ids }) => {
+  const r = await api('GET', `/api/documents/decision-changes${qs({ since, ids: ids ? ids.join(',') : undefined })}`);
   return textResult({ count: r.documents.length, documents: r.documents });
 });
 

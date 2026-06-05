@@ -103,6 +103,38 @@ Specs, plans, and notes live as documents foldered by project: `<repo>/specs`,
 `POST /api/documents` (or `document_create`), attach it to its task with
 `document_attach`, and cross-link via `[[task:<id>]]` / `[[doc:<id>]]` wikilinks.
 
+### Decisions and comments (collaborative review)
+
+When you author a spec or plan and hit a genuine fork the user must settle,
+don't guess. Attach a **decision** to the doc and let the user resolve it:
+
+- `document_decision_create({ document_id, prompt, options: [{label, description?}] })`
+  (min 2 options). Set `review_status` to `in-review` and add free-form
+  `document_comment_add` notes for context. Comments + decisions form an
+  append-only reasoning chain.
+- The **user** resolves decisions (in the app or `document_decision_resolve`);
+  you can't pick for them. Poll `documents_pending_decisions` or
+  `documents_decision_changes_since({ since })` to learn the outcome, then
+  `document_get` (returns `{document, comments, decisions}`) to read the chosen
+  option + note, and proceed. `document_decision_cancel` supersedes a moot one.
+
+### Prototypes (embeddable sandboxed HTML)
+
+You can author self-contained HTML artifacts that render inside a doc — page
+mockups, inline SVG/JS charts, small interactive tools.
+
+- `prototype_create({ title, html, tags? })` → id; `prototype_update`,
+  `prototype_get` (returns `approved`), `prototype_list`, `prototype_delete`.
+- Embed by adding a fenced block to the doc body: a ```` ```prototype ```` fence
+  whose first line is the prototype id (optionally `<id> height=640`).
+- **The user must approve a prototype before it first renders.** It runs in a
+  strict sandbox (no network, no token/app access). There is no
+  `prototype_approve` tool — you **cannot** self-approve, and editing the html
+  re-arms the gate. So: create it, embed the block, tell the user it's awaiting
+  approval, and poll `prototype_get.approved` to know when they signed off.
+
+See `../../MCP.md` for the full tool contracts.
+
 ## Don't
 
 - Don't write R2 credentials over the API. The user sets those in the app's
