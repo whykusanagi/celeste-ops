@@ -113,10 +113,11 @@ don't guess. Attach a **decision** to the doc and let the user resolve it:
   `document_comment_add` notes for context. Comments + decisions form an
   append-only reasoning chain.
 - The **user** resolves decisions (in the app or `document_decision_resolve`);
-  you can't pick for them. Poll `documents_pending_decisions` or
-  `documents_decision_changes_since({ since })` to learn the outcome, then
-  `document_get` (returns `{document, comments, decisions}`) to read the chosen
-  option + note, and proceed. `document_decision_cancel` supersedes a moot one.
+  you can't pick for them. Poll `documents_decisions` (no args = open queue; pass
+  `since` to wait on changes) to learn the outcome, then `document_get` (returns
+  `{document, comments, decisions}`) to read the chosen option + note, and
+  proceed. `document_decision_cancel` supersedes a moot one. (Review state uses
+  `documents_review` the same way.)
 
 ### Prototypes (embeddable sandboxed HTML)
 
@@ -132,6 +133,22 @@ mockups, inline SVG/JS charts, small interactive tools.
   `prototype_approve` tool — you **cannot** self-approve, and editing the html
   re-arms the gate. So: create it, embed the block, tell the user it's awaiting
   approval, and poll `prototype_get.approved` to know when they signed off.
+
+### Document lifecycle & close-out
+
+Docs have two flags beyond `review_status`: **`pinned`** (evergreen reference —
+voice guides, procedures, conventions; stays in the Reference tab forever) and
+**`archived_at`** (closed work — hidden from active lists but still searchable).
+Set either with `document_update({ pinned })` / `document_update({ archived })`.
+List with `documents_list({ includeArchived, archivedOnly, pinnedOnly })`.
+
+Tag a sprint's docs `cycle:<id>`; close it out with
+`documents_archive_cycle({ cycle })` (archives them, skipping pinned).
+
+**At the end of a validated piece of work:** mark its tasks `done`, confirm the
+spec/plan are `approved`, then archive the cycle's specs/plans/notes so they
+leave the active set (they remain searchable for history). Never archive pinned
+reference docs — pin evergreen material instead.
 
 See `../../MCP.md` for the full tool contracts.
 
