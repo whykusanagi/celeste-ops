@@ -623,6 +623,15 @@ server.registerTool('prototype_delete', {
   inputSchema: { id: z.string().min(1) },
 }, async ({ id }) => textResult(await api('DELETE', `/api/prototypes/${encodeURIComponent(id)}`)));
 
+server.registerTool('prototype_backlinks', {
+  title: 'Prototype Backlinks',
+  description: 'Documents that embed this prototype (its usage). Check before updating/deleting. Returns {count, documents}.',
+  inputSchema: { id: z.string().min(1) },
+}, async ({ id }) => {
+  const r = await api('GET', `/api/prototypes/${encodeURIComponent(id)}/backlinks`);
+  return textResult({ count: r.documents.length, documents: r.documents });
+});
+
 // ---- Scheduled posts ---------------------------------------------------------
 
 server.registerTool('scheduled_post_create', {
@@ -702,13 +711,17 @@ server.registerTool('calendar_get_month', {
 
 server.registerTool('documents_list', {
   title: 'List Documents',
-  description: 'List documents, most-recent-first, each with attachments[]. Returns {count, documents[]}. Pass folder to scope to a project: documents_list({ folder: "<repo>" }) returns that repo plus its sub-folders (e.g. <repo>/specs, <repo>/plans). Pass review_status to filter by approval state (e.g. "in-review").',
+  description: 'List documents (newest first) with attachments[], archived_at, pinned. Returns {count, documents[]}. `folder` scopes to a project. Archived excluded by default; pass includeArchived / archivedOnly / pinnedOnly to change scope.',
   inputSchema: {
     folder: z.string().optional(),
     review_status: ReviewStatusSchema.optional(),
+    includeArchived: z.boolean().optional(),
+    archivedOnly: z.boolean().optional(),
+    pinnedOnly: z.boolean().optional(),
   },
 }, async (filter) => {
-  const r = await api('GET', `/api/documents${qs(filter)}`);
+  // Agents default to excluding archived noise; explicit includeArchived wins.
+  const r = await api('GET', `/api/documents${qs({ includeArchived: false, ...filter })}`);
   return textResult({ count: r.documents.length, documents: r.documents });
 });
 
@@ -739,7 +752,7 @@ server.registerTool('document_create', {
 
 server.registerTool('document_update', {
   title: 'Update Document',
-  description: 'Patch a document. At least one of title/body/tags/folder/review_status required. Returns {document}. NOTE: if the doc is in a review workflow (review_status "in-review" or "approved") and you change its content WITHOUT also passing review_status, it auto-flips to "modified" and bumps review_status_updated_at — signaling a watcher to re-read it from CelesteOps rather than trust a cached copy. Pass review_status explicitly to edit without signaling. Docs with review_status=null never auto-flip.',
+  description: 'Patch a document. At least one of title/body/tags/folder/review_status/archived/pinned required. Returns {document}. NOTE: if the doc is in a review workflow (review_status "in-review" or "approved") and you change its content WITHOUT also passing review_status, it auto-flips to "modified" and bumps review_status_updated_at — signaling a watcher to re-read it from CelesteOps rather than trust a cached copy. Pass review_status explicitly to edit without signaling. Docs with review_status=null never auto-flip. LIFECYCLE: {archived:true} hides it from active lists (still searchable), {archived:false} restores; {pinned:true} marks it evergreen reference. Set review_status here too — there is no separate set-status tool.',
   inputSchema: {
     id: z.string().min(1),
     patch: z.object({
@@ -748,16 +761,18 @@ server.registerTool('document_update', {
       tags: z.array(z.string()).optional(),
       folder: z.string().nullable().optional(),
       review_status: ReviewStatusSchema.nullable().optional(),
+      archived: z.boolean().optional(),
+      pinned: z.boolean().optional(),
     }),
   },
 }, async ({ id, patch }) => textResult(await api('PATCH', `/api/documents/${encodeURIComponent(id)}`, patch)));
 
-server.registerTool('document_set_review_status', {
-  title: 'Set Document Review Status',
+server.registerTool('documents_archive_cycle', {
+  title: 'Archive a Cycle/Sprint',
   description:
-    'Set/clear review_status: "in-review" (awaiting user), "approved", "modified", or null. Atomic single-purpose version of document_update for the approval workflow. Returns {document}.',
-  inputSchema: { id: z.string().min(1), review_status: ReviewStatusSchema.nullable() },
-}, async ({ id, review_status }) => textResult(await api('PATCH', `/api/documents/${encodeURIComponent(id)}`, { review_status })));
+    'Bulk-archive every document tagged `cycle:<cycle>` (e.g. cycle:v1.10), skipping pinned docs. Use at sprint close-out so a finished cycle drops out of active views while staying searchable. Returns {archived: count}.',
+  inputSchema: { cycle: z.string().min(1) },
+}, async ({ cycle }) => textResult(await api('POST', '/api/documents/archive-cycle', { cycle })));
 
 server.registerTool('document_folders_list', {
   title: 'List Document Folders',
@@ -815,31 +830,24 @@ server.registerTool('document_backlinks', {
 server.registerTool('documents_search', {
   title: 'Search Documents (Full-Text)',
   description: 'Full-text search across document titles, bodies, and tags (FTS5 + bm25). Returns {count, hits[]} with **bold**-marked snippets.',
-  inputSchema: { q: z.string().min(1), limit: z.number().int().min(1).max(200).optional() },
-}, async ({ q, limit }) => {
-  const r = await api('GET', `/api/documents/search${qs({ q, limit })}`);
+  inputSchema: { q: z.string().min(1), limit: z.number().int().min(1).max(200).optional(), includeArchived: z.boolean().optional() },
+}, async ({ q, limit, includeArchived }) => {
+  const r = await api('GET', `/api/documents/search${qs({ q, limit, includeArchived })}`);
   return textResult({ count: r.hits.length, hits: r.hits });
 });
 
-server.registerTool('documents_pending_review', {
-  title: 'List Documents Awaiting Review',
-  description: 'Returns every document in review_status "in-review", oldest pending first. Returns {count, documents[]}.',
-  inputSchema: {},
-}, async () => {
-  const r = await api('GET', '/api/documents/pending-review');
-  return textResult({ count: r.documents.length, documents: r.documents });
-});
-
-server.registerTool('documents_review_changes_since', {
-  title: 'Poll for Review State Changes',
+server.registerTool('documents_review', {
+  title: 'Review queue / poll for review changes',
   description:
-    'Returns every document whose review_status was set/changed at/after the given ISO timestamp. Pass `ids` to scope to specific docs (typical agent flow). Returns {count, documents[]}.',
+    'No args: docs currently in review_status "in-review" (pending queue, oldest first). With `since` (ISO): docs whose review_status changed at/after that time (polling primitive) — poll until status flips to "approved"/"modified" (a content edit to an in-review/approved doc auto-flips it to "modified" and fires this). `ids` scopes the poll. Returns {count, documents[]}.',
   inputSchema: {
-    since: z.string().describe('ISO timestamp, e.g. "2026-05-28T07:30:00.000Z"'),
+    since: z.string().optional().describe('ISO timestamp. Omit for the pending queue; provide to poll for changes.'),
     ids: z.array(z.string()).optional(),
   },
 }, async ({ since, ids }) => {
-  const r = await api('GET', `/api/documents/review-changes${qs({ since, ids: ids ? ids.join(',') : undefined })}`);
+  const r = since
+    ? await api('GET', `/api/documents/review-changes${qs({ since, ids: ids ? ids.join(',') : undefined })}`)
+    : await api('GET', '/api/documents/pending-review');
   return textResult({ count: r.documents.length, documents: r.documents });
 });
 
@@ -882,22 +890,21 @@ server.registerTool('document_decision_cancel', {
 }, async ({ id }) =>
   textResult(await api('POST', `/api/decisions/${encodeURIComponent(id)}/cancel`, {})));
 
-server.registerTool('documents_pending_decisions', {
-  title: 'Documents Pending Decisions',
-  description: 'Every document with at least one open decision. Returns {count, pending}.',
-  inputSchema: {},
-}, async () => {
+server.registerTool('documents_decisions', {
+  title: 'Decision queue / poll for decision changes',
+  description:
+    'No args: docs with at least one open decision, plus those decisions — returns {count, pending}. With `since` (ISO): docs whose decisions changed (created/resolved/cancelled) at/after that time — returns {count, documents}. `ids` scopes the poll.',
+  inputSchema: {
+    since: z.string().optional().describe('ISO timestamp. Omit for the open-decision queue; provide to poll for changes.'),
+    ids: z.array(z.string()).optional(),
+  },
+}, async ({ since, ids }) => {
+  if (since) {
+    const r = await api('GET', `/api/documents/decision-changes${qs({ since, ids: ids ? ids.join(',') : undefined })}`);
+    return textResult({ count: r.documents.length, documents: r.documents });
+  }
   const r = await api('GET', '/api/documents/pending-decisions');
   return textResult({ count: r.pending.length, pending: r.pending });
-});
-
-server.registerTool('documents_decision_changes_since', {
-  title: 'Documents Decision Changes Since',
-  description: 'Documents whose decisions changed at/after an ISO timestamp. Returns {count, documents}.',
-  inputSchema: { since: z.string().min(1), ids: z.array(z.string()).optional() },
-}, async ({ since, ids }) => {
-  const r = await api('GET', `/api/documents/decision-changes${qs({ since, ids: ids ? ids.join(',') : undefined })}`);
-  return textResult({ count: r.documents.length, documents: r.documents });
 });
 
 // ---- Cross-cutting -----------------------------------------------------------
