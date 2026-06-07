@@ -159,7 +159,7 @@ server.registerTool('today_dashboard_get', {
 server.registerTool('tasks_list', {
   title: 'List Tasks',
   description:
-    'List tasks with optional filters. Returns {count, tasks[]}. Filter by area, status, priority, dueDate, taskKind ("human"|"ai"), repo (exact match), or tag (membership). To find all work for a project: tasks_list({ repo: "<repo>" }). To find cross-cutting work: tasks_list({ tag: "security" }). Combine filters to narrow.',
+    'List tasks. Returns {count, tasks[]}. Filters: area, status, priority, dueDate, taskKind, repo (exact), tag (membership) — combine to narrow. Scope to a project with { repo: "<repo>" }.',
   inputSchema: {
     area: TaskAreaSchema.optional(),
     status: TaskStatusSchema.optional(),
@@ -200,7 +200,7 @@ server.registerTool('tasks_unblocked', {
 server.registerTool('task_create', {
   title: 'Create Task',
   description:
-    "Create a single task. BUSINESS RULE: max 3 P1 tasks in todo|doing per due_date — check p1ActiveCount from today_dashboard_get first. area: content|stream|interview|ops|health. priority: P0=blocker, P1=today, P2=this week, P3=backlog. Put context (file paths, commit SHA, links, reasoning) in description. Set task_kind='ai' for agent-to-agent tasks; populate repo/branch/commit_sha for code-linked work.",
+    "Create a task. RULE: max 3 P1s in todo|doing per due_date (check p1ActiveCount via today_dashboard_get first). Put context (paths, SHAs, reasoning) in description; set task_kind='ai' + repo/branch for agent/code work. Field details in MCP.md.",
   inputSchema: TaskFields,
 }, async (input) => {
   const r = await api('POST', '/api/tasks', input);
@@ -734,7 +734,7 @@ server.registerTool('document_get', {
 server.registerTool('document_create', {
   title: 'Create Document',
   description:
-    'Create a document. Body is GFM markdown with [[wikilink]] / [[task:<id>]] / [[doc:<id>]] / [[item:<id>]] refs. Use `folder` (slash path like "celeste-cli/specs") for sidebar grouping; null = Unfiled. For specs/plans set review_status:"in-review" to surface Approve/Mark Modified. Returns {document}.',
+    'Create a document (GFM markdown body; supports [[wikilink]]/[[task:id]]/[[doc:id]]/[[item:id]]). `folder` = slash path for grouping (null = Unfiled). For specs/plans set review_status:"in-review". Returns {document}.',
   inputSchema: {
     title: z.string().min(1),
     body: z.string(),
@@ -752,7 +752,7 @@ server.registerTool('document_create', {
 
 server.registerTool('document_update', {
   title: 'Update Document',
-  description: 'Patch a document. At least one of title/body/tags/folder/review_status/archived/pinned required. Returns {document}. NOTE: if the doc is in a review workflow (review_status "in-review" or "approved") and you change its content WITHOUT also passing review_status, it auto-flips to "modified" and bumps review_status_updated_at — signaling a watcher to re-read it from CelesteOps rather than trust a cached copy. Pass review_status explicitly to edit without signaling. Docs with review_status=null never auto-flip. LIFECYCLE: {archived:true} hides it from active lists (still searchable), {archived:false} restores; {pinned:true} marks it evergreen reference. Set review_status here too — there is no separate set-status tool.',
+  description: 'Patch a document (≥1 of title/body/tags/folder/review_status/archived/pinned). Returns {document}. Editing the content of an in-review/approved doc without passing review_status auto-flips it to "modified" (re-read signal) — pass review_status to edit silently. {archived} hides/restores (still searchable); {pinned} = evergreen reference. Sets review_status too (no separate tool). Details in MCP.md.',
   inputSchema: {
     id: z.string().min(1),
     patch: z.object({
