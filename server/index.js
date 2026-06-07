@@ -159,7 +159,7 @@ server.registerTool('today_dashboard_get', {
 server.registerTool('tasks_list', {
   title: 'List Tasks',
   description:
-    'List tasks with optional filters. Returns {count, tasks[]}. Filter by area, status, priority, dueDate, taskKind ("human"|"ai"), repo (exact match), or tag (membership). To find all work for a project: tasks_list({ repo: "<repo>" }). To find cross-cutting work: tasks_list({ tag: "security" }). Combine filters to narrow.',
+    'List tasks. Returns {count, tasks[]}. Filters: area, status, priority, dueDate, taskKind, repo (exact), tag (membership) — combine to narrow. Scope to a project with { repo: "<repo>" }.',
   inputSchema: {
     area: TaskAreaSchema.optional(),
     status: TaskStatusSchema.optional(),
@@ -200,7 +200,7 @@ server.registerTool('tasks_unblocked', {
 server.registerTool('task_create', {
   title: 'Create Task',
   description:
-    "Create a single task. BUSINESS RULE: max 3 P1 tasks in todo|doing per due_date — check p1ActiveCount from today_dashboard_get first. area: content|stream|interview|ops|health. priority: P0=blocker, P1=today, P2=this week, P3=backlog. Put context (file paths, commit SHA, links, reasoning) in description. Set task_kind='ai' for agent-to-agent tasks; populate repo/branch/commit_sha for code-linked work.",
+    "Create a task. RULE: max 3 P1s in todo|doing per due_date (check p1ActiveCount via today_dashboard_get first). Put context (paths, SHAs, reasoning) in description; set task_kind='ai' + repo/branch for agent/code work. Field details in MCP.md.",
   inputSchema: TaskFields,
 }, async (input) => {
   const r = await api('POST', '/api/tasks', input);
@@ -581,6 +581,57 @@ server.registerTool('asset_delete', {
   inputSchema: { id: z.string().min(1) },
 }, async ({ id }) => textResult(await api('DELETE', `/api/assets/${encodeURIComponent(id)}`)));
 
+// ---- Prototypes --------------------------------------------------------------
+
+server.registerTool('prototype_create', {
+  title: 'Create Prototype',
+  description: 'Create an HTML prototype artifact (embed it in a doc via a ```prototype block with the returned id). User must approve before first render. Returns {prototype}.',
+  inputSchema: { title: z.string().min(1), html: z.string().min(1), tags: z.array(z.string()).optional() },
+}, async ({ title, html, tags }) =>
+  textResult(await api('POST', '/api/prototypes', { title, html, tags: tags ?? [] })));
+
+server.registerTool('prototype_update', {
+  title: 'Update Prototype',
+  description: 'Patch a prototype (title/html/tags). Editing html re-arms approval. Returns {prototype}.',
+  inputSchema: { id: z.string().min(1), title: z.string().min(1).optional(), html: z.string().min(1).optional(), tags: z.array(z.string()).optional() },
+}, async ({ id, title, html, tags }) => {
+  const patch = {};
+  if (title !== undefined) patch.title = title;
+  if (html !== undefined) patch.html = html;
+  if (tags !== undefined) patch.tags = tags;
+  return textResult(await api('PATCH', `/api/prototypes/${encodeURIComponent(id)}`, patch));
+});
+
+server.registerTool('prototype_get', {
+  title: 'Get Prototype',
+  description: 'Fetch a prototype by id (incl html + approval state + csp). Returns {prototype, approved, csp}.',
+  inputSchema: { id: z.string().min(1) },
+}, async ({ id }) => textResult(await api('GET', `/api/prototypes/${encodeURIComponent(id)}`)));
+
+server.registerTool('prototype_list', {
+  title: 'List Prototypes',
+  description: 'List all prototypes (newest first). Returns {count, prototypes}.',
+  inputSchema: {},
+}, async () => {
+  const r = await api('GET', '/api/prototypes');
+  return textResult({ count: r.prototypes.length, prototypes: r.prototypes });
+});
+
+server.registerTool('prototype_delete', {
+  title: 'Delete Prototype',
+  description: 'Delete a prototype by id. Irreversible. Returns {deleted: id}.',
+  inputSchema: { id: z.string().min(1) },
+}, async ({ id }) => textResult(await api('DELETE', `/api/prototypes/${encodeURIComponent(id)}`)));
+
+server.registerTool('prototype_backlinks', {
+  title: 'Prototype Backlinks',
+  description: 'Documents that embed this prototype (its usage). Check before updating/deleting. Returns {count, documents}.',
+  inputSchema: { id: z.string().min(1) },
+}, async ({ id }) => {
+  const r = await api('GET', `/api/prototypes/${encodeURIComponent(id)}/backlinks`);
+  return textResult({ count: r.documents.length, documents: r.documents });
+});
+
 // ---- Scheduled posts ---------------------------------------------------------
 
 server.registerTool('scheduled_post_create', {
@@ -660,26 +711,30 @@ server.registerTool('calendar_get_month', {
 
 server.registerTool('documents_list', {
   title: 'List Documents',
-  description: 'List documents, most-recent-first, each with attachments[]. Returns {count, documents[]}. Pass folder to scope to a project: documents_list({ folder: "<repo>" }) returns that repo plus its sub-folders (e.g. <repo>/specs, <repo>/plans). Pass review_status to filter by approval state (e.g. "in-review").',
+  description: 'List documents (newest first) with attachments[], archived_at, pinned. Returns {count, documents[]}. `folder` scopes to a project. Archived excluded by default; pass includeArchived / archivedOnly / pinnedOnly to change scope.',
   inputSchema: {
     folder: z.string().optional(),
     review_status: ReviewStatusSchema.optional(),
+    includeArchived: z.boolean().optional(),
+    archivedOnly: z.boolean().optional(),
+    pinnedOnly: z.boolean().optional(),
   },
 }, async (filter) => {
-  const r = await api('GET', `/api/documents${qs(filter)}`);
+  // Agents default to excluding archived noise; explicit includeArchived wins.
+  const r = await api('GET', `/api/documents${qs({ includeArchived: false, ...filter })}`);
   return textResult({ count: r.documents.length, documents: r.documents });
 });
 
 server.registerTool('document_get', {
   title: 'Get Document',
-  description: 'Fetch a single document by id. Returns {document}. Errors 404 if not found.',
+  description: 'Fetch a single document by id. Returns {document, comments, decisions}. Errors 404 if not found.',
   inputSchema: { id: z.string().min(1) },
 }, async ({ id }) => textResult(await api('GET', `/api/documents/${encodeURIComponent(id)}`)));
 
 server.registerTool('document_create', {
   title: 'Create Document',
   description:
-    'Create a document. Body is GFM markdown with [[wikilink]] / [[task:<id>]] / [[doc:<id>]] / [[item:<id>]] refs. Use `folder` (slash path like "celeste-cli/specs") for sidebar grouping; null = Unfiled. For specs/plans set review_status:"in-review" to surface Approve/Mark Modified. Returns {document}.',
+    'Create a document (GFM markdown body; supports [[wikilink]]/[[task:id]]/[[doc:id]]/[[item:id]]). `folder` = slash path for grouping (null = Unfiled). For specs/plans set review_status:"in-review". Returns {document}.',
   inputSchema: {
     title: z.string().min(1),
     body: z.string(),
@@ -697,7 +752,7 @@ server.registerTool('document_create', {
 
 server.registerTool('document_update', {
   title: 'Update Document',
-  description: 'Patch a document. At least one of title/body/tags/folder/review_status required. Returns {document}. NOTE: if the doc is in a review workflow (review_status "in-review" or "approved") and you change its content WITHOUT also passing review_status, it auto-flips to "modified" and bumps review_status_updated_at — signaling a watcher to re-read it from CelesteOps rather than trust a cached copy. Pass review_status explicitly to edit without signaling. Docs with review_status=null never auto-flip.',
+  description: 'Patch a document (≥1 of title/body/tags/folder/review_status/archived/pinned). Returns {document}. Editing the content of an in-review/approved doc without passing review_status auto-flips it to "modified" (re-read signal) — pass review_status to edit silently. {archived} hides/restores (still searchable); {pinned} = evergreen reference. Sets review_status too (no separate tool). Details in MCP.md.',
   inputSchema: {
     id: z.string().min(1),
     patch: z.object({
@@ -706,16 +761,18 @@ server.registerTool('document_update', {
       tags: z.array(z.string()).optional(),
       folder: z.string().nullable().optional(),
       review_status: ReviewStatusSchema.nullable().optional(),
+      archived: z.boolean().optional(),
+      pinned: z.boolean().optional(),
     }),
   },
 }, async ({ id, patch }) => textResult(await api('PATCH', `/api/documents/${encodeURIComponent(id)}`, patch)));
 
-server.registerTool('document_set_review_status', {
-  title: 'Set Document Review Status',
+server.registerTool('documents_archive_cycle', {
+  title: 'Archive a Cycle/Sprint',
   description:
-    'Set/clear review_status: "in-review" (awaiting user), "approved", "modified", or null. Atomic single-purpose version of document_update for the approval workflow. Returns {document}.',
-  inputSchema: { id: z.string().min(1), review_status: ReviewStatusSchema.nullable() },
-}, async ({ id, review_status }) => textResult(await api('PATCH', `/api/documents/${encodeURIComponent(id)}`, { review_status })));
+    'Bulk-archive every document tagged `cycle:<cycle>` (e.g. cycle:v1.10), skipping pinned docs. Use at sprint close-out so a finished cycle drops out of active views while staying searchable. Returns {archived: count}.',
+  inputSchema: { cycle: z.string().min(1) },
+}, async ({ cycle }) => textResult(await api('POST', '/api/documents/archive-cycle', { cycle })));
 
 server.registerTool('document_folders_list', {
   title: 'List Document Folders',
@@ -773,32 +830,81 @@ server.registerTool('document_backlinks', {
 server.registerTool('documents_search', {
   title: 'Search Documents (Full-Text)',
   description: 'Full-text search across document titles, bodies, and tags (FTS5 + bm25). Returns {count, hits[]} with **bold**-marked snippets.',
-  inputSchema: { q: z.string().min(1), limit: z.number().int().min(1).max(200).optional() },
-}, async ({ q, limit }) => {
-  const r = await api('GET', `/api/documents/search${qs({ q, limit })}`);
+  inputSchema: { q: z.string().min(1), limit: z.number().int().min(1).max(200).optional(), includeArchived: z.boolean().optional() },
+}, async ({ q, limit, includeArchived }) => {
+  const r = await api('GET', `/api/documents/search${qs({ q, limit, includeArchived })}`);
   return textResult({ count: r.hits.length, hits: r.hits });
 });
 
-server.registerTool('documents_pending_review', {
-  title: 'List Documents Awaiting Review',
-  description: 'Returns every document in review_status "in-review", oldest pending first. Returns {count, documents[]}.',
-  inputSchema: {},
-}, async () => {
-  const r = await api('GET', '/api/documents/pending-review');
-  return textResult({ count: r.documents.length, documents: r.documents });
-});
-
-server.registerTool('documents_review_changes_since', {
-  title: 'Poll for Review State Changes',
+server.registerTool('documents_review', {
+  title: 'Review queue / poll for review changes',
   description:
-    'Returns every document whose review_status was set/changed at/after the given ISO timestamp. Pass `ids` to scope to specific docs (typical agent flow). Returns {count, documents[]}.',
+    'No args: docs currently in review_status "in-review" (pending queue, oldest first). With `since` (ISO): docs whose review_status changed at/after that time (polling primitive) — poll until status flips to "approved"/"modified" (a content edit to an in-review/approved doc auto-flips it to "modified" and fires this). `ids` scopes the poll. Returns {count, documents[]}.',
   inputSchema: {
-    since: z.string().describe('ISO timestamp, e.g. "2026-05-28T07:30:00.000Z"'),
+    since: z.string().optional().describe('ISO timestamp. Omit for the pending queue; provide to poll for changes.'),
     ids: z.array(z.string()).optional(),
   },
 }, async ({ since, ids }) => {
-  const r = await api('GET', `/api/documents/review-changes${qs({ since, ids: ids ? ids.join(',') : undefined })}`);
+  const r = since
+    ? await api('GET', `/api/documents/review-changes${qs({ since, ids: ids ? ids.join(',') : undefined })}`)
+    : await api('GET', '/api/documents/pending-review');
   return textResult({ count: r.documents.length, documents: r.documents });
+});
+
+server.registerTool('document_comment_add', {
+  title: 'Add Document Comment',
+  description: 'Append a free-form comment to a document (author recorded as "agent"). Returns {comment}.',
+  inputSchema: { document_id: z.string().min(1), body: z.string().min(1) },
+}, async ({ document_id, body }) =>
+  textResult(await api('POST', `/api/documents/${encodeURIComponent(document_id)}/comments`, { body, author: 'agent' })));
+
+server.registerTool('document_comments_list', {
+  title: 'List Document Comments',
+  description: 'List a document\'s comments in chronological order. Returns {comments}.',
+  inputSchema: { document_id: z.string().min(1) },
+}, async ({ document_id }) =>
+  textResult(await api('GET', `/api/documents/${encodeURIComponent(document_id)}/comments`)));
+
+server.registerTool('document_decision_create', {
+  title: 'Create Document Decision',
+  description: 'Attach a decision (prompt + 2+ options) to a document. Returns {decision} with generated option ids.',
+  inputSchema: {
+    document_id: z.string().min(1),
+    prompt: z.string().min(1),
+    options: z.array(z.object({ label: z.string().min(1), description: z.string().optional() })).min(2),
+  },
+}, async ({ document_id, prompt, options }) =>
+  textResult(await api('POST', `/api/documents/${encodeURIComponent(document_id)}/decisions`, { prompt, options })));
+
+server.registerTool('document_decision_resolve', {
+  title: 'Resolve Document Decision',
+  description: 'Resolve an open decision with a chosen option and/or note (at least one). Returns {decision}.',
+  inputSchema: { id: z.string().min(1), chosen_option_id: z.string().optional(), resolution_note: z.string().optional() },
+}, async ({ id, chosen_option_id, resolution_note }) =>
+  textResult(await api('POST', `/api/decisions/${encodeURIComponent(id)}/resolve`, { chosen_option_id, resolution_note })));
+
+server.registerTool('document_decision_cancel', {
+  title: 'Cancel Document Decision',
+  description: 'Cancel an open decision. Returns {decision}.',
+  inputSchema: { id: z.string().min(1) },
+}, async ({ id }) =>
+  textResult(await api('POST', `/api/decisions/${encodeURIComponent(id)}/cancel`, {})));
+
+server.registerTool('documents_decisions', {
+  title: 'Decision queue / poll for decision changes',
+  description:
+    'No args: docs with at least one open decision, plus those decisions — returns {count, pending}. With `since` (ISO): docs whose decisions changed (created/resolved/cancelled) at/after that time — returns {count, documents}. `ids` scopes the poll.',
+  inputSchema: {
+    since: z.string().optional().describe('ISO timestamp. Omit for the open-decision queue; provide to poll for changes.'),
+    ids: z.array(z.string()).optional(),
+  },
+}, async ({ since, ids }) => {
+  if (since) {
+    const r = await api('GET', `/api/documents/decision-changes${qs({ since, ids: ids ? ids.join(',') : undefined })}`);
+    return textResult({ count: r.documents.length, documents: r.documents });
+  }
+  const r = await api('GET', '/api/documents/pending-decisions');
+  return textResult({ count: r.pending.length, pending: r.pending });
 });
 
 // ---- Cross-cutting -----------------------------------------------------------

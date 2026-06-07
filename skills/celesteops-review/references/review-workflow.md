@@ -4,22 +4,23 @@ Use this reference for the common review loop so you do not need to load the ful
 
 ## Document approval queue
 
-1. Call `documents_pending_review`.
+1. Call `documents_pending_review` **and** `documents_pending_decisions`. The first is the review-status queue; the second (`{count, pending:[{document, decisions}]}`) is docs where an authoring agent attached a structured question the user must resolve — a doc can be in one queue, the other, or both. Use `documents_decision_changes_since({since, ids?})` to poll for resolutions on docs you already surfaced.
 2. If the user names a repo, call `projects_list` first and keep the repo slug handy for later searches.
 3. For each candidate document:
-   - Call `document_get` for the full body.
+   - Call `document_get` for the full body. It returns `{document, comments, decisions}` — the embedded reasoning chain. Read the comments (agent annotations, prior approve-with-note reasons) and any pending decision (its `prompt` + `options`) so you present the doc and the open choice together.
    - Call `documents_for_entity` if the doc is attached to a task or content item.
    - Call `document_backlinks` if the doc looks like part of a larger spec chain.
    - Call `tasks_search` or `tasks_list` when the doc mentions a repo, branch, feature, or implementation task.
 4. Summarize each item:
    - What it is
-   - What decision is being requested
+   - What decision is being requested — for an open decision, lay out the labelled options so the user can pick
    - Risks, missing information, or inconsistencies
-   - Recommended disposition: approve, modify, or ask follow-up
-5. Change review state only on explicit instruction from the user:
-   - `document_set_review_status({ review_status: "approved" })`
+   - Recommended disposition: approve, modify, resolve a decision, or ask follow-up
+5. Change review state or resolve a decision only on explicit instruction from the user. These are user-driven; perform them only when asked:
+   - `document_set_review_status({ review_status: "approved" })` (optionally with a note that is filed as a comment on the status change)
    - `document_set_review_status({ review_status: "modified" })`
    - `document_set_review_status({ review_status: null })`
+   - `document_decision_resolve({ id, chosen_option_id?, resolution_note? })` — pass the option the user chose and/or their note (at least one). Decisions are append-only and stay on record after resolving.
 
 ## Content pipeline review
 

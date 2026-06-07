@@ -71,7 +71,7 @@ any token there, and set an expiry. The list updates as clients connect.
 
 ## See also
 
-- [`MCP.md`](./MCP.md): the 56-tool reference for agents.
+- [`MCP.md`](./MCP.md): the 68-tool reference for agents.
 - [`VERIFY.md`](./VERIFY.md): verify a downloaded release with PGP.
 - [`skills/celesteops-tasks`](./skills/celesteops-tasks): a skill that teaches an
   agent to read and write CelesteOps tasks.

@@ -1,8 +1,8 @@
 # CelesteOps MCP Server
 
-This document is the single source of truth for any LLM operating the CelesteOps MCP server. It covers what the system is, how to connect, every data entity, all business rules, all 56 tools with full input/output documentation, recommended workflows, example prompts, and error handling. Read this document fully before making any tool calls.
+This document is the single source of truth for any LLM operating the CelesteOps MCP server. It covers what the system is, how to connect, every data entity, all business rules, all 67 tools with full input/output documentation, recommended workflows, example prompts, and error handling. Read this document fully before making any tool calls.
 
-> **Tool count:** the shim exposes **56** tools. Confirm what your client sees after connecting — Claude Code: `/mcp`; Celeste CLI: the TUI's MCP panel.
+> **Tool count:** the shim exposes **67** tools. Confirm what your client sees after connecting — Claude Code: `/mcp`; Celeste CLI: the TUI's MCP panel.
 
 ---
 
@@ -28,6 +28,7 @@ This document is the single source of truth for any LLM operating the CelesteOps
    - [Documents](#group-12-documents)
    - [Daily Notes](#group-13-daily-notes)
    - [Projects & Tags](#group-14-projects--tags)
+   - [Prototypes](#group-15-prototypes)
 7. [Example Prompts](#example-prompts)
 8. [Error Handling](#error-handling)
 
@@ -49,7 +50,7 @@ CelesteOps manages:
 All data lives in a local SQLite database. There are two front-ends over the same database layer, both entirely local:
 
 - **The app's HTTP API**, hosted by the running desktop app on `127.0.0.1:43121`. This is the single writer — its UI live-updates as changes land.
-- **A stdio MCP shim** (`server/index.js` in this kit), which exposes all 56 tools over the Model Context Protocol and forwards each call to that HTTP API. This is what MCP clients (Claude Code, Claude Desktop, Cursor, Codex, …) connect to.
+- **A stdio MCP shim** (`server/index.js` in this kit), which exposes all 67 tools over the Model Context Protocol and forwards each call to that HTTP API. This is what MCP clients (Claude Code, Claude Desktop, Cursor, Codex, …) connect to.
 
 ---
 
@@ -79,7 +80,7 @@ bun run install:mcp                 # detect installed clients and wire them up
 
 This merges a `celeste-ops` MCP server into each detected client's config — **Claude Code** (`.mcp.json`), **Claude Desktop** (`claude_desktop_config.json`), **Cursor** (`~/.cursor/mcp.json`), **Codex** (`~/.codex/config.toml`), and **Celeste CLI** (`~/.celeste/mcp.json`) — preserving any other servers and backing up each file to `<file>.bak`. Use `--dry-run` to preview, `--port <n>` for a non-default API port. Restart each client afterward. **The CelesteOps app must be running** (the shim talks to its HTTP API).
 
-> **Celeste CLI note:** external MCP servers are loaded only by the interactive `celeste chat` TUI (not `message`/`agent`/`serve`). On launch it connects to the shim and registers all 56 tools — confirm in the TUI's MCP panel.
+> **Celeste CLI note:** external MCP servers are loaded only by the interactive `celeste chat` TUI (not `message`/`agent`/`serve`). On launch it connects to the shim and registers all 67 tools — confirm in the TUI's MCP panel.
 
 For Claude Desktop, the packaged `celeste-ops.mcpb` bundle is the preferred one-click path (drag onto **Settings → Extensions**).
 
@@ -447,6 +448,35 @@ A many-to-many link between a document and a task or content_item.
 
 When a document is deleted, all its attachments are removed via `ON DELETE CASCADE`. When a task or content_item is deleted, the app code cleans up its attachment rows so no orphans remain.
 
+### DocumentComment
+
+An immutable, free-form comment appended to a document — the doc's reasoning chain. Comments are never edited or deleted.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` (UUID) | Unique identifier. |
+| `document_id` | `string` (UUID) | The document this comment belongs to. |
+| `author` | `'user'` \| `'agent'` | `agent` when added via MCP; `user` from the desktop UI. |
+| `body` | `string` | Comment text. |
+| `review_status` | `'in-review'` \| `'approved'` \| `'modified'` \| `null` | Set only when the comment accompanied an approve/modified action; otherwise `null`. |
+| `created_at` | `string` (ISO 8601) | When the comment was added. |
+
+### DocumentDecision
+
+A structured question attached to a document: a prompt plus a set of options the user picks from. The "pick one" counterpart to the approve/modify review signal.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` (UUID) | Unique identifier. |
+| `document_id` | `string` (UUID) | The document this decision belongs to. |
+| `prompt` | `string` | The question posed to the user. |
+| `options` | `[{ id, label, description? }]` | At least 2 options; each `id` is generated server-side. |
+| `status` | `'open'` \| `'resolved'` \| `'cancelled'` | Lifecycle state. |
+| `chosen_option_id` | `string` \| `null` | The picked option's id once resolved. |
+| `resolution_note` | `string` \| `null` | Optional free-text note left at resolution. |
+| `created_at` | `string` (ISO 8601) | When the decision was created. |
+| `resolved_at` | `string` (ISO 8601) \| `null` | When it was resolved or cancelled; `null` while open. |
+
 ---
 
 ## Business Rules
@@ -578,7 +608,7 @@ Restore is available only via the desktop app UI (Settings → Backup History �
 
 ## Tool Reference
 
-All 56 tools are documented below in groups. Every tool returns a JSON object serialized as a text content block. Parse the `text` field of the first content item as JSON.
+All 67 tools are documented below in groups. Every tool returns a JSON object serialized as a text content block. Parse the `text` field of the first content item as JSON.
 
 Response envelope shape for all tools:
 
@@ -827,7 +857,7 @@ Full-text search across task `title`, `description`, `tags`, `repo`, and `branch
       "status": "done",
       "tags": ["server", "sse"],
       "task_kind": "ai",
-      "repo": "my-repo",
+      "repo": "content-control",
       "branch": "fix/sse-idle-timeout",
       "snippet": "Bun.serve **idleTimeout** was 30s, SSE heartbeat …",
       "created_at": "…",
@@ -1737,9 +1767,19 @@ Standalone markdown documents that can be attached to any number of tasks or con
 
 #### `documents_list`
 
-Lists all documents most-recent-first. Each entry includes an `attachments` array showing every task and content_item the doc is linked to.
+Lists documents most-recent-first. Each entry includes an `attachments` array showing every task and content_item the doc is linked to.
 
-**Inputs**: none.
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `folder` | `string` | No | Scope to a project folder — returns that folder and all its sub-folders (e.g. `content-control` → `content-control/specs`, `content-control/plans`, …). |
+| `review_status` | `'in-review' \| 'approved' \| 'modified'` | No | Filter to one approval state. For "what needs review?" pass `in-review` (or use `documents_review`). An unrecognized value is rejected with `400`. |
+| `includeArchived` | `boolean` | No | Default **false** for agents (archived docs are hidden). Pass `true` to include them. |
+| `archivedOnly` | `boolean` | No | Only archived docs. |
+| `pinnedOnly` | `boolean` | No | Only pinned (evergreen reference) docs. |
+
+Each returned doc also carries `archived_at` (null = active) and `pinned`.
 
 **Returns**
 
@@ -1765,7 +1805,7 @@ Lists all documents most-recent-first. Each entry includes an `attachments` arra
 **Notes**
 
 - Order is `updated_at DESC`.
-- Filter client-side by title or tags — there's no server filter (the document set is expected to be small).
+- `folder` and `review_status` filter server-side (AND-combined). For other fields, filter client-side or use `documents_search`.
 
 ---
 
@@ -1779,7 +1819,11 @@ Fetches a single document by id.
 |---|---|---|---|
 | `id` | `string` (UUID) | Yes | Document id from `documents_list` or `document_create`. |
 
-**Returns** `{ "document": Document }`. Errors with `Document not found` if the id doesn't exist.
+**Returns** `{ "document": Document, "comments": [DocumentComment, …], "decisions": [DocumentDecision, …] }`. The response now embeds the doc's full comment chain (the reasoning log) and its decisions (open/resolved/cancelled) alongside the Document, so one call gives the complete review context. Errors with `Document not found` if the id doesn't exist.
+
+**Notes**
+
+- `comments` is chronological (oldest first); `decisions` carries every decision regardless of status. Use `document_comments_list` / `documents_decisions` if you only need one or the other.
 
 ---
 
@@ -1813,20 +1857,28 @@ Patches a document. Bumps `updated_at`.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | `string` (UUID) | Yes | Document id. |
-| `patch` | object | Yes | At least one of: `title`, `body`, `tags`, `folder`, `review_status`. |
+| `patch` | object | Yes | At least one of: `title`, `body`, `tags`, `folder`, `review_status`, `archived`, `pinned`. |
 
 **Returns** `{ "document": Document }` (full updated record). Errors with `Document not found` if the id doesn't exist.
+
+> **Lifecycle (orthogonal to review_status).** `{ "archived": true }` archives the
+> doc — it drops out of active lists and Recent Review Activity but stays
+> searchable; `{ "archived": false }` restores it. `{ "pinned": true }` marks it
+> evergreen reference (always in the Reference tab, never auto-archived). Use
+> archived for closed-sprint docs, pinned for Celeste voice / procedures /
+> conventions. Bulk-archive a sprint with `documents_archive_cycle`.
 
 > **Auto-modified on content edits.** If the doc is in a review workflow
 > (`review_status` is `in-review` or `approved`) and you change its content
 > (`title`/`body`/`tags`/`folder`) **without** also passing `review_status`, the
 > status auto-flips to `modified` and `review_status_updated_at` is bumped. This
-> is the signal a watching agent polls on (`documents_review_changes_since`): it
+> is the signal a watching agent polls on (`documents_review`): it
 > means the doc changed, so the agent must **re-read it from CelesteOps** instead
 > of trusting a cached/in-context copy or the local mirrored markdown. No-op saves
-> (identical content) don't trigger it. To edit without signaling, pass the
-> intended `review_status` explicitly in the same patch — an explicit value
-> always wins. Docs with `review_status: null` have no workflow and never auto-flip.
+> (identical content) don't trigger it. To edit a doc in review *without*
+> signaling, pass the intended `review_status` explicitly in the same patch — an
+> explicit value always wins. Docs with `review_status: null` have no workflow
+> and never auto-flip.
 
 ---
 
@@ -1979,7 +2031,7 @@ Returns every unique `folder` path used by documents, with usage counts. Use thi
   "folders": [
     { "folder": "",                "doc_count": 4 },
     { "folder": "celeste-cli",     "doc_count": 9 },
-    { "folder": "my-repo", "doc_count": 12 },
+    { "folder": "content-control", "doc_count": 12 },
     { "folder": "daily",           "doc_count": 31 },
     { "folder": "music",           "doc_count": 5 },
     { "folder": "reference",       "doc_count": 7 }
@@ -1995,55 +2047,158 @@ Returns every unique `folder` path used by documents, with usage counts. Use thi
 
 ---
 
-#### `document_set_review_status`
+#### `documents_review`
 
-Set or clear the `review_status` on a document. This is the atomic, single-purpose alternative to `document_update` for the approval workflow — use it when handing off a spec/plan to the user, after the user approves, or to mark a doc the user modified.
-
-**Inputs**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `id` | `string` (UUID) | Yes | Document id. |
-| `review_status` | `'in-review' \| 'approved' \| 'modified' \| null` | Yes | Set the new status, or `null` to clear. |
-
-**Returns** `{ "document": Document }` (full updated record, with refreshed `review_status_updated_at`).
-
-**Notes**
-
-- Bumps `review_status_updated_at` and sets the status directly. Use this for explicit transitions (submit / approve / clear). Content edits via `document_update` to an in-review/approved doc also bump it (auto-`modified`).
-- Errors with `Document not found` if the id doesn't exist.
-- Status meanings: `in-review` = awaiting user; `approved` = user signed off; `modified` = the doc changed since the agent last saw it — **re-read before acting** (set explicitly, or auto-set when an in-review/approved doc's content is edited); `null` = no workflow.
-
----
-
-#### `documents_pending_review`
-
-Returns every document currently in `review_status: "in-review"`. Use this at session start to discover what specs/plans the user (or this agent) is blocked on.
-
-**Inputs**: none.
-
-**Returns** `{ "count": N, "documents": [Document, …] }` ordered by `review_status_updated_at` ascending (oldest pending first — these have been waiting longest).
-
----
-
-#### `documents_review_changes_since`
-
-Polling primitive for agents waiting on user review. Returns every document whose `review_status_updated_at` is at or after the given ISO timestamp.
+Review-workflow query. Replaces the former `documents_pending_review` + `documents_review_changes_since` (one tool with an optional `since`). Note: the former `document_set_review_status` was also removed — set status via `document_update({ review_status })`.
 
 **Inputs**
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `since` | `string` (ISO timestamp) | Yes | e.g. `"2026-05-28T07:30:00.000Z"`. |
-| `ids` | `string[]` | No | Optional: filter to this set of document ids. The typical agent flow scopes the poll to the specific doc(s) submitted for review. |
+| `since` | `string` (ISO timestamp) | No | **Omit** → the pending queue (docs in `review_status: "in-review"`, oldest first). **Provide** → poll: docs whose `review_status_updated_at` is at/after this time (newest first). |
+| `ids` | `string[]` | No | With `since`, scope the poll to these doc ids. |
 
-**Returns** `{ "count": N, "documents": [Document, …] }` ordered newest first by `review_status_updated_at`.
+**Returns** `{ "count": N, "documents": [Document, …] }`.
 
 **Notes**
 
-- Pair with the doc's `review_status_updated_at` field from a prior `document_create` / `document_set_review_status` call — record that timestamp, then periodically call this with it until the doc's status flips to `approved` or `modified`.
-- The signal fires on explicit status changes **and** when the user edits the content of a doc that's `in-review`/`approved` (which auto-flips it to `modified`). It does **not** fire for edits to docs with no review workflow (`review_status: null`), nor for no-op saves. So a hit always means "this doc you're tracking actually changed — re-read it."
-- Without `ids`, returns the global change list (useful for a single watcher coordinating multiple submissions).
+- Pending mode (no `since`) is the session-start "what's blocked on the user" query.
+- Poll mode: record a doc's `review_status_updated_at` after submitting it, then call with that timestamp until the status flips to `approved`/`modified`.
+- The signal fires on explicit status changes **and** when a user edits the content of an `in-review`/`approved` doc (which auto-flips it to `modified`). It does not fire for no-workflow docs (`review_status: null`) or no-op saves.
+
+---
+
+#### `documents_archive_cycle`
+
+Bulk-archive every document tagged `cycle:<cycle>` (e.g. `cycle:v1.10`), skipping pinned (evergreen) docs. Use at sprint close-out so a finished cycle drops out of active views while staying searchable.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cycle` | `string` | Yes | Cycle id without the `cycle:` prefix, e.g. `"v1.10"`. |
+
+**Returns** `{ "archived": N }` (count archived; pinned docs are skipped).
+
+---
+
+#### Decisions & comments (the reasoning chain)
+
+The review workflow above (`documents_review` + `document_update({ review_status })`) tracks a single approve / modify signal. The tools below layer two finer-grained channels onto the same document, both surfaced in the doc's Review panel and embedded in `document_get`:
+
+- **Comments** — immutable, free-form remarks appended to a doc (the reasoning log). Comments added via MCP are authored as `"agent"`; the user's own comments are `"user"`. A comment that accompanies an approve/modified action carries that `review_status`.
+- **Decisions** — structured questions (a prompt + 2 or more options) handed to the user to pick from. Poll for the resolution the same way you poll for review state, then read the chosen option + note back off the document. This is the decision counterpart of the review-status workflow: where `review_status` answers "is this approved?", a decision answers "which of these alternatives?".
+
+---
+
+#### `document_comment_add`
+
+Append an immutable, free-form comment to a document — a remark or explanation that joins the doc's reasoning chain. For a question that needs the user to choose between alternatives, use `document_decision_create` instead.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `document_id` | `string` (UUID) | Yes | Document to comment on. |
+| `body` | `string` (min 1) | Yes | Comment text. |
+
+**Returns** `{ "comment": DocumentComment }`.
+
+**Notes**
+
+- Comments are immutable — there is no edit/delete tool.
+- Author is recorded as `"agent"` when added via MCP. User comments (authored `"user"`) come from the desktop UI.
+
+---
+
+#### `document_comments_list`
+
+Lists a document's comments in chronological order (oldest first) — the reasoning chain for that doc.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `document_id` | `string` (UUID) | Yes | Document whose comments to list. |
+
+**Returns** `{ "comments": [DocumentComment, …] }`.
+
+**Notes**
+
+- Each `DocumentComment` is `{ id, document_id, author: 'user' | 'agent', body, review_status: 'in-review' | 'approved' | 'modified' | null, created_at }`. `review_status` is set only when the comment accompanied an approve/modified action.
+- `document_get` already embeds this list in its `comments` field.
+
+---
+
+#### `document_decision_create`
+
+Attach a structured decision to a document: a prompt plus 2 or more options for the user to pick from. Use this when handing off a spec/plan and you need the user to choose between alternatives rather than just approve or reject.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `document_id` | `string` (UUID) | Yes | Document the decision belongs to. |
+| `prompt` | `string` (min 1) | Yes | The question to ask the user. |
+| `options` | `[{ label: string, description?: string }]` | Yes | At least **2** options. Each option's `id` is generated server-side and returned. |
+
+**Returns** `{ "decision": DocumentDecision }` with the option ids populated.
+
+**Notes**
+
+- Poll `documents_decisions` (with `since`) to learn when the user resolves it, then call `document_get` for the chosen option + resolution note.
+- A decision is the "pick one" counterpart to the approve/modify review signal.
+
+---
+
+#### `document_decision_resolve`
+
+Resolves an open decision by choosing an option and/or leaving a note. Primarily a user action via the UI; exposed here for tests and delegated answering.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (UUID) | Yes | Decision id (from `document_decision_create`, `documents_decisions`, or `document_get`). |
+| `chosen_option_id` | `string` | No | The picked option's id. |
+| `resolution_note` | `string` | No | Free-text note. |
+
+At least one of `chosen_option_id` / `resolution_note` is required.
+
+**Returns** `{ "decision": DocumentDecision }` (now `status: "resolved"` with `resolved_at` set).
+
+---
+
+#### `document_decision_cancel`
+
+Cancels an open decision you no longer need answered (e.g. you revised the spec and the question is moot). The decision is kept for the record with its original prompt and options.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (UUID) | Yes | Decision id to cancel. |
+
+**Returns** `{ "decision": DocumentDecision }` (now `status: "cancelled"`).
+
+---
+
+#### `documents_decisions`
+
+Decision-workflow query (mirrors `documents_review`). Replaces the former `documents_pending_decisions` + `documents_decision_changes_since`.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `since` | `string` (ISO timestamp) | No | **Omit** → docs with ≥1 open (unresolved) decision, plus those decisions. **Provide** → poll: docs whose decisions changed (created/resolved/cancelled) at/after this time. |
+| `ids` | `string[]` | No | With `since`, scope the poll to these doc ids. |
+
+**Returns** — pending mode: `{ "count": N, "pending": [{ "document": Document, "decisions": [DocumentDecision, …] }] }`. Poll mode: `{ "count": N, "documents": [Document, …] }`.
+
+**Notes**
+
+- After creating a decision, record the time, then poll until the doc appears; then `document_get` for the resolved choice + note.
 
 ---
 
@@ -2115,7 +2270,7 @@ Use this at session start to scope into a specific project, or to surface cross-
   "count": 4,
   "projects": [
     {
-      "repo": "my-repo",
+      "repo": "content-control",
       "task_count": 47,
       "open_task_count": 12,
       "p0_count": 0,
@@ -2159,6 +2314,164 @@ Returns every unique tag across documents and tasks with usage counts. Useful fo
 
 - Sorted by `total DESC`, then alphabetical.
 - A tag with `total: 1` is usually a singleton; consider consolidating or deleting it.
+
+---
+
+### Group 15: Prototypes
+
+A **prototype** is a stored, self-contained HTML artifact (it may include inline CSS and JS). It is embedded in a document via a fenced code block whose language is `prototype` and whose body is the prototype's id (optionally followed by `height=NNN` for the iframe height):
+
+````
+```prototype
+<prototype-id>
+height=480
+```
+````
+
+**Security model (read before authoring):** a prototype renders inside `<iframe sandbox="allow-scripts" srcdoc=…>` — a **null origin** (no `allow-same-origin`), so it cannot reach the local API, the auth token, cookies, or the parent page. An injected CSP (`default-src 'none'; … connect-src 'none'`) blocks **all** network requests; images/styles/fonts may only load from a user-managed host allowlist (Settings → `prototype_allowlisted_hosts`). The server stores the HTML **verbatim and does not sanitize it** — the sandbox + CSP is the control. A prototype must be **approved by the user in the UI** before it first renders; approval is bound to a content hash, so editing the html re-arms the gate. **There is no `prototype_approve` MCP tool** — an authoring agent cannot approve its own prototype. See `docs/SECURITY-SPEC.md` §7.
+
+---
+
+#### `prototype_create`
+
+Creates a self-contained HTML artifact that can be embedded in a document via a ```prototype fenced block containing the returned id. The HTML may include inline CSS and JS. The **user** must approve it in the UI before it first renders — you cannot approve your own prototype.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `title` | `string` (min 1) | Yes | Human-readable title shown in the management UI. |
+| `html` | `string` (min 1) | Yes | The self-contained HTML document. Stored verbatim; rendered in a sandboxed iframe. |
+| `tags` | `string[]` | No | Labels for filtering. Defaults to `[]`. |
+
+**Returns**
+
+```json
+{
+  "prototype": Prototype
+}
+```
+
+**Notes**
+
+- The created prototype is **unapproved**; it will not render until the user approves it. Poll `prototype_get` to learn when that happens.
+
+---
+
+#### `prototype_update`
+
+Patches a prototype's `title`, `html`, and/or `tags`. At least one field is required. Editing `html` **re-arms the approval gate** — the user must re-approve before the new version renders. Cannot set approval (user-only).
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (min 1) | Yes | Prototype ID to patch. |
+| `title` | `string` (min 1) | No | New title. |
+| `html` | `string` (min 1) | No | New HTML. Changing this clears the prior approval. |
+| `tags` | `string[]` | No | Replacement tag array. |
+
+**Returns**
+
+```json
+{
+  "prototype": Prototype
+}
+```
+
+**Notes**
+
+- An empty patch (no fields) is rejected.
+
+---
+
+#### `prototype_get`
+
+Fetches a prototype by id, including its `html` and current approval state.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (min 1) | Yes | Prototype ID. |
+
+**Returns**
+
+```json
+{
+  "prototype": Prototype,
+  "approved": true
+}
+```
+
+**Notes**
+
+- `approved` is `true` only when the user has signed off on the **current** html. Poll this to learn when the user approves your prototype.
+
+---
+
+#### `prototype_list`
+
+Lists all prototypes, newest first.
+
+**Inputs**: none.
+
+**Returns**
+
+```json
+{
+  "count": 3,
+  "prototypes": [Prototype, ...]
+}
+```
+
+---
+
+#### `prototype_delete`
+
+Permanently deletes a prototype by id. Irreversible.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (min 1) | Yes | Prototype ID to delete. |
+
+**Returns**
+
+```json
+{
+  "deleted": "uuid-string"
+}
+```
+
+---
+
+#### `prototype_backlinks`
+
+Returns the documents that **embed** this prototype (via a ` ```prototype ` block) — i.e. its usage. Check this **before** `prototype_update` (editing the html re-arms the approval gate) or `prototype_delete`, so you know which docs are affected. Only fenced ` ```prototype ` blocks count; a prototype id mentioned in ordinary prose is **not** a backlink.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` (min 1) | Yes | Prototype ID. |
+
+**Returns**
+
+```json
+{
+  "count": 2,
+  "documents": [
+    { "id": "doc-uuid", "title": "Landing page concept" }
+  ]
+}
+```
+
+**Notes**
+
+- `count` is `documents.length`. A `count` of 0 means no document embeds this prototype — safe to delete without breaking an embed.
+- Errors if the prototype id does not exist.
 
 ---
 
@@ -2382,9 +2695,9 @@ Note: Only 3 P1s allowed per day. Check `p1ActiveCount` first; use P2 if cap is 
 
 ### Database initialization error
 
-**Cause**: The MCP server could not initialize the SQLite database or required runtime directories.
+**Cause**: The CelesteOps app could not initialize the SQLite database or required runtime directories.
 
-**Resolution**: Ensure `bun install` has been run from the project root and the process has write access to `~/Library/Application Support/CelesteOps/`. (This applies to the dev direct-to-SQLite server, `bun run mcp` — not the shim, which never opens the database. The **shim** depends on the app's HTTP API being reachable on port 43121; if it isn't, see "CelesteOps not reachable" above.)
+**Resolution**: The shim never opens the database — it only calls the app's HTTP API. So this is an app-side issue: make sure the CelesteOps app launched cleanly and has write access to `~/Library/Application Support/CelesteOps/`. If the shim can't reach the API on port 43121, see "CelesteOps not reachable" above.
 
 ---
 
