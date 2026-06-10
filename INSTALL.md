@@ -13,7 +13,9 @@ like Codex that block direct loopback.
   [Releases](https://github.com/whykusanagi/celeste-ops/releases), verify it
   ([VERIFY.md](./VERIFY.md)), unzip it, move `CelesteOps.app` to `/Applications`,
   and launch it. The shim forwards to its API on `127.0.0.1:43121`.
-- This repo, cloned locally (you run the installer from it).
+- This repo, cloned locally — for Claude Code, Cursor, Codex, and Celeste CLI
+  (you run the installer from it). **Claude Desktop doesn't need it** — it installs
+  from `celeste-ops.mcpb` directly (see below).
 - Node 18+ (runs the shim) and [Bun](https://bun.sh) (runs the installer). The
   installer writes the shim's absolute node path into each config, so GUI clients
   that don't inherit your shell `PATH` still launch it.
@@ -47,7 +49,20 @@ clients, generate a fresh code per client and re-run with the matching `--client
 Run `install:mcp` without `--pair`/`--client` to wire all detected clients with no
 token (the app then rejects them with a 401 until you pair them).
 
-Claude Desktop has a shortcut: drag `celeste-ops.mcpb` onto Settings → Extensions.
+## Claude Desktop (no clone needed)
+
+Claude Desktop installs from the bundle alone — you don't need this repo, Bun, or
+`npm install`. The `.mcpb` carries the shim and runs on Claude Desktop's own Node.
+
+1. In the app: **Settings → Connections → select "Claude Desktop" → Add Client**, copy the 6-digit code.
+2. In Claude Desktop: **Settings → Extensions → install `celeste-ops.mcpb`** (drag it in, or "Install Extension…"),
+   and paste the code into the **Pairing code** field.
+3. Enable it. On first launch the extension exchanges the code for a token and caches it at
+   `~/Library/Application Support/CelesteOps/clients/claude-desktop.<port>.json` (mode 0600) —
+   the code is single-use, so you won't need it again.
+
+Revoke or rotate any time from Settings → Connections; a revoked token surfaces a re-pair
+message in Claude Desktop's MCP log.
 
 ## Install the agent skill (optional)
 
