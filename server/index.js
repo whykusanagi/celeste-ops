@@ -14,6 +14,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import os from 'node:os';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveAuth } from './auth.js';
 
 // Validate the port (defends against the "1@evil.com" host-pivot — SECURITY-SPEC §5).
 const PORT_RAW = process.env.CELESTE_OPS_API_PORT || '43121';
@@ -29,7 +33,8 @@ const BASE_URL = `http://127.0.0.1:${PORT_NUM}`;
 // handshake) is tracked in SECURITY-SPEC.
 // Token-trust auth (SECURITY-SPEC §2): the installer enrolls this client and
 // writes its token here. Sent as a Bearer header on every request.
-const API_TOKEN = process.env.CELESTE_OPS_TOKEN || '';
+// Resolved once in main() (env token, cached token, or pairing-code enroll).
+let apiToken = '';
 
 // ── HTTP helper ──────────────────────────────────────────────────────────────
 
@@ -38,7 +43,7 @@ async function api(method, path, body) {
   try {
     const headers = {};
     if (body !== undefined) headers['content-type'] = 'application/json';
-    if (API_TOKEN) headers['authorization'] = `Bearer ${API_TOKEN}`;
+    if (apiToken) headers['authorization'] = `Bearer ${apiToken}`;
     res = await fetch(BASE_URL + path, {
       method,
       headers: Object.keys(headers).length ? headers : undefined,
@@ -55,6 +60,14 @@ async function api(method, path, body) {
     data = text ? JSON.parse(text) : {};
   } catch {
     data = { raw: text };
+  }
+  if (res.status === 401) {
+    const detail = data && data.error ? ` (server: ${data.error})` : '';
+    throw new Error(
+      `CelesteOps rejected this client (401)${detail} — the token may have been revoked. Re-authorize: ` +
+      'Claude Desktop → generate a new pairing code in Connections → Add Client and re-enter it in the ' +
+      'extension settings; Claude Code → re-run `bun run install:mcp --pair <code> --client claude-code`.',
+    );
   }
   if (!res.ok) {
     const msg = data && data.error ? data.error : `HTTP ${res.status}`;
@@ -931,9 +944,34 @@ server.registerTool('projects_list', {
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  try {
+    const { token, source } = await resolveAuth({
+      env: process.env,
+      baseUrl: BASE_URL,
+      port: PORT_NUM,
+      home: os.homedir(),
+      extDir: dirname(fileURLToPath(import.meta.url)),
+      log: (m) => console.error(m),
+    });
+    apiToken = token;
+    if (source === 'none') {
+      console.error(
+        '[celeste-ops-mcp] no credential found. Set CELESTE_OPS_TOKEN, or paste a ' +
+        'pairing code (CelesteOps → Connections → Add Client) into the extension settings.',
+      );
+    }
+  } catch (e) {
+    console.error(
+      `[celeste-ops-mcp] auth setup failed: ${e instanceof Error ? e.message : String(e)}\n` +
+      '  → Generate a fresh pairing code in CelesteOps → Connections → Add Client and ' +
+      're-enter it in the extension settings.',
+    );
+    process.exit(1);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`[celeste-ops-mcp] extension running on stdio → ${BASE_URL}`);
+  console.error(`[celeste-ops-mcp] extension running on stdio → ${BASE_URL} (auth: ${apiToken ? 'on' : 'off'})`);
 }
 
 main().catch((error) => {
