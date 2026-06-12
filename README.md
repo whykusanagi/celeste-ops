@@ -17,7 +17,8 @@ private; here you get the built app plus what a client needs to connect to it.
 - `MCP.md`: the 67-tool reference for agents.
 - `INSTALL.md`: how to connect your clients.
 - `VERIFY.md`: how to verify a signed release download.
-- `celeste-ops.mcpb`: one-click Claude Desktop extension.
+- `celeste-ops.mcpb`: one-click Claude Desktop extension — install it and paste a
+  pairing code; no clone needed.
 - Releases host the signed macOS app, `checksums.txt`, and its signature.
 
 ## Quick start
@@ -35,6 +36,9 @@ private; here you get the built app plus what a client needs to connect to it.
    # One client per run — pass the matching --client slug:
    bun run install:mcp --pair <code> --client claude-code
    ```
+
+   **Claude Desktop is simpler** — no clone needed: install `celeste-ops.mcpb`
+   (Settings → Extensions) and paste a pairing code. See [INSTALL.md](./INSTALL.md).
 
 ## License
 
