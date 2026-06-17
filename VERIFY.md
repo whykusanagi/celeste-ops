@@ -17,8 +17,10 @@ Download the app archive, `checksums.txt`, and `checksums.txt.asc` from the same
 Release into one folder, then:
 
 ```bash
-# 1. Import the signing key. This repo ships it as whykusanagi.asc — use that copy,
-#    it carries the signing subkey the release was signed with.
+# 1. Import the signing key. The repo ships it as whykusanagi.asc and it carries
+#    the signing subkey the release was signed with. If you haven't cloned the
+#    repo, fetch just the key first:
+curl -O https://raw.githubusercontent.com/whykusanagi/celeste-ops/main/whykusanagi.asc
 gpg --import whykusanagi.asc
 
 # 2. Confirm the fingerprint, and cross-check it against an independent source:
