@@ -94,8 +94,8 @@ function buildThumbnailUrl(p) {
   const s = new URLSearchParams();
   if (p.title) s.set('title', p.title);
   if (p.subtitle) s.set('subtitle', p.subtitle);
-  if (p.characterImage) s.set('characterImage', p.characterImage);
-  if (p.glowColor) s.set('glowColor', p.glowColor);
+  if (p.character_image) s.set('character_image', p.character_image);
+  if (p.glow_color) s.set('glow_color', p.glow_color);
   const str = s.toString();
   return str ? `${THUMBNAIL_BASE_URL}?${str}` : THUMBNAIL_BASE_URL;
 }
@@ -121,8 +121,8 @@ const ReviewStatusSchema = z.enum(['in-review', 'approved', 'modified']);
 const ThumbnailParamsSchema = z.object({
   title: z.string().default(''),
   subtitle: z.string().default(''),
-  characterImage: z.string().default(''),
-  glowColor: z.string().default('magenta'),
+  character_image: z.string().default(''),
+  glow_color: z.string().default('magenta'),
 });
 
 const TaskFields = {
@@ -172,13 +172,13 @@ server.registerTool('today_dashboard_get', {
 server.registerTool('tasks_list', {
   title: 'List Tasks',
   description:
-    'List tasks. Returns {count, tasks[]}. Filters: area, status, priority, dueDate, taskKind, repo (exact), tag (membership) — combine to narrow. Scope to a project with { repo: "<repo>" }.',
+    'List tasks. Returns {count, tasks[]}. Filters: area, status, priority, due_date, task_kind, repo (exact), tag (membership) — combine to narrow. Scope to a project with { repo: "<repo>" }.',
   inputSchema: {
     area: TaskAreaSchema.optional(),
     status: TaskStatusSchema.optional(),
-    dueDate: DATE.optional(),
+    due_date: DATE.optional(),
     priority: TaskPrioritySchema.optional(),
-    taskKind: z.enum(['human', 'ai']).optional(),
+    task_kind: z.enum(['human', 'ai']).optional(),
     repo: z.string().optional(),
     tag: z.string().optional(),
   },
@@ -203,10 +203,10 @@ server.registerTool('tasks_search', {
 server.registerTool('tasks_unblocked', {
   title: 'List Tasks Ready to Start (Blockers Done)',
   description:
-    'Returns todo tasks whose every blocked_by id resolves to a done task. Tasks with no blockers are excluded by default; pass includeNoBlockers=true to include them.',
-  inputSchema: { includeNoBlockers: z.boolean().optional() },
-}, async ({ includeNoBlockers }) => {
-  const r = await api('GET', `/api/tasks/unblocked${qs({ includeNoBlockers })}`);
+    'Returns todo tasks whose every blocked_by id resolves to a done task. Tasks with no blockers are excluded by default; pass include_no_blockers=true to include them.',
+  inputSchema: { include_no_blockers: z.boolean().optional() },
+}, async ({ include_no_blockers }) => {
+  const r = await api('GET', `/api/tasks/unblocked${qs({ include_no_blockers })}`);
   return textResult({ count: r.tasks.length, tasks: r.tasks });
 });
 
@@ -368,19 +368,19 @@ server.registerTool('daily_notes_list', {
 server.registerTool('settings_get', {
   title: 'Get Settings',
   description:
-    'Read current app settings (autoBackup, autoBackupHour, defaultCadence, R2 fields, appInstanceId). R2 fields are required for backup_run_manual.',
+    'Read current app settings (auto_backup, auto_backup_hour, default_cadence, R2 fields, app_instance_id). R2 fields are required for backup_run_manual.',
   inputSchema: {},
 }, async () => textResult(await api('GET', '/api/settings')));
 
 server.registerTool('settings_update', {
   title: 'Update Settings',
   description:
-    'Patch settings fields. autoBackupHour is 24h (0–23). defaultCadence keys are lowercase weekday names. Do NOT set R2 credentials here — use the UI Settings panel to avoid exposing secrets.',
+    'Patch settings fields. auto_backup_hour is 24h (0–23). default_cadence keys are lowercase weekday names. Do NOT set R2 credentials here — use the UI Settings panel to avoid exposing secrets.',
   inputSchema: {
     patch: z.object({
-      autoBackup: z.boolean().optional(),
-      autoBackupHour: z.number().int().min(0).max(23).optional(),
-      defaultCadence: z.record(z.string(), z.string()).optional(),
+      auto_backup: z.boolean().optional(),
+      auto_backup_hour: z.number().int().min(0).max(23).optional(),
+      default_cadence: z.record(z.string(), z.string()).optional(),
     }).refine((o) => Object.keys(o).length > 0, 'patch cannot be empty'),
   },
 }, async ({ patch }) => textResult(await api('PATCH', '/api/settings', { patch })));
@@ -405,7 +405,7 @@ server.registerTool('backups_list', {
 server.registerTool('stream_event_create', {
   title: 'Create Stream Event',
   description:
-    "Create a stream day entry. stream_type: subathon|stream|special|rest. start_time/end_time are HH:MM 24h. thumbnail_params stores generator config {title, subtitle, characterImage, glowColor}. Returns {created: event}.",
+    "Create a stream day entry. stream_type: subathon|stream|special|rest. start_time/end_time are HH:MM 24h. thumbnail_params stores generator config {title, subtitle, character_image, glow_color}. Returns {created: event}.",
   inputSchema: StreamEventFields,
 }, async (input) => {
   const r = await api('POST', '/api/stream-events', input);
@@ -476,7 +476,7 @@ server.registerTool('stream_events_batch_create', {
 server.registerTool('thumbnail_url_build', {
   title: 'Build Thumbnail Generator URL',
   description:
-    "Build a URL to the thumbnail generator from stored or explicit params. Provide stream_event_id to use a stream event's stored thumbnail_params, OR explicit params {title, subtitle, characterImage, glowColor}. Returns {url}.",
+    "Build a URL to the thumbnail generator from stored or explicit params. Provide stream_event_id to use a stream event's stored thumbnail_params, OR explicit params {title, subtitle, character_image, glow_color}. Returns {url}.",
   inputSchema: { stream_event_id: z.string().optional(), params: ThumbnailParamsSchema.optional() },
 }, async ({ stream_event_id, params }) => {
   let p = params;
@@ -673,9 +673,9 @@ server.registerTool('scheduled_post_create', {
 
 server.registerTool('scheduled_post_list', {
   title: 'List Scheduled Posts',
-  description: "List scheduled posts with optional streamEventId, platform, and status filters. Returns {count, posts[]}.",
+  description: "List scheduled posts with optional stream_event_id, platform, and status filters. Returns {count, posts[]}.",
   inputSchema: {
-    streamEventId: z.string().optional(),
+    stream_event_id: z.string().optional(),
     platform: PostPlatformSchema.optional(),
     status: PostStatusSchema.optional(),
   },
@@ -724,17 +724,17 @@ server.registerTool('calendar_get_month', {
 
 server.registerTool('documents_list', {
   title: 'List Documents',
-  description: 'List documents (newest first) with attachments[], archived_at, pinned. Returns {count, documents[]}. `folder` scopes to a project. Archived excluded by default; pass includeArchived / archivedOnly / pinnedOnly to change scope.',
+  description: 'List documents (newest first) with attachments[], archived_at, pinned. Returns {count, documents[]}. `folder` scopes to a project. Archived excluded by default; pass include_archived / archived_only / pinned_only to change scope.',
   inputSchema: {
     folder: z.string().optional(),
     review_status: ReviewStatusSchema.optional(),
-    includeArchived: z.boolean().optional(),
-    archivedOnly: z.boolean().optional(),
-    pinnedOnly: z.boolean().optional(),
+    include_archived: z.boolean().optional(),
+    archived_only: z.boolean().optional(),
+    pinned_only: z.boolean().optional(),
   },
 }, async (filter) => {
-  // Agents default to excluding archived noise; explicit includeArchived wins.
-  const r = await api('GET', `/api/documents${qs({ includeArchived: false, ...filter })}`);
+  // Agents default to excluding archived noise; explicit include_archived wins.
+  const r = await api('GET', `/api/documents${qs({ include_archived: false, ...filter })}`);
   return textResult({ count: r.documents.length, documents: r.documents });
 });
 
@@ -843,9 +843,9 @@ server.registerTool('document_backlinks', {
 server.registerTool('documents_search', {
   title: 'Search Documents (Full-Text)',
   description: 'Full-text search across document titles, bodies, and tags (FTS5 + bm25). Returns {count, hits[]} with **bold**-marked snippets.',
-  inputSchema: { q: z.string().min(1), limit: z.number().int().min(1).max(200).optional(), includeArchived: z.boolean().optional() },
-}, async ({ q, limit, includeArchived }) => {
-  const r = await api('GET', `/api/documents/search${qs({ q, limit, includeArchived })}`);
+  inputSchema: { q: z.string().min(1), limit: z.number().int().min(1).max(200).optional(), include_archived: z.boolean().optional() },
+}, async ({ q, limit, include_archived }) => {
+  const r = await api('GET', `/api/documents/search${qs({ q, limit, include_archived })}`);
   return textResult({ count: r.hits.length, hits: r.hits });
 });
 
