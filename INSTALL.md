@@ -6,6 +6,14 @@ the running CelesteOps app. Each client talks to the app through a stdio shim
 hop is stdio, so this works the same in every client, including sandboxed ones
 like Codex that block direct loopback.
 
+> **Pre-release — match the plugin to your app version.** CelesteOps and this shim
+> share a contract that changes between versions (e.g. the 1.0.5 snake_case field
+> rename). Use a kit (`server/` shim + `celeste-ops.mcpb`) whose version **matches
+> your installed CelesteOps app release** — the shim reports its version on connect
+> (from `manifest.json`); the app's is in Settings → build-info. A mismatched plugin
+> may send or expect renamed fields. After updating the app, re-run `install:mcp`
+> (or reinstall the `.mcpb` / restart the client) so the plugin reloads the matching shim.
+
 ## Prerequisites
 
 - **The CelesteOps app, installed and running.** Download

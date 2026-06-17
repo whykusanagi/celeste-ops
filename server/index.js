@@ -15,9 +15,21 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import os from 'node:os';
+import { readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveAuth } from './auth.js';
+
+// The shim version tracks the release app — read it from the bundle's
+// manifest.json (one level up from server/) so the plugin self-identifies a
+// version you can match against your CelesteOps app. PRE-RELEASE: the tool
+// contract can change between versions; a mismatched plugin may send/expect
+// renamed fields. Use a kit (shim + .mcpb) whose version matches your installed
+// app release. Falls back to '0.0.0' if the manifest can't be read.
+let SHIM_VERSION = '0.0.0';
+try {
+  SHIM_VERSION = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')).version || SHIM_VERSION;
+} catch { /* manifest absent (unusual layout) — keep the fallback */ }
 
 // Validate the port (defends against the "1@evil.com" host-pivot — SECURITY-SPEC §5).
 const PORT_RAW = process.env.CELESTE_OPS_API_PORT || '43121';
@@ -155,7 +167,7 @@ const StreamEventFields = {
 
 // ── Server ───────────────────────────────────────────────────────────────────
 
-const server = new McpServer({ name: 'celeste-ops-mcp', version: '1.0.0' });
+const server = new McpServer({ name: 'celeste-ops-mcp', version: SHIM_VERSION });
 
 // ---- Tasks -------------------------------------------------------------------
 

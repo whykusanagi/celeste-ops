@@ -2,6 +2,8 @@
 
 This document is the single source of truth for any LLM operating the CelesteOps MCP server. It covers what the system is, how to connect, every data entity, all business rules, all 69 tools with full input/output documentation, recommended workflows, example prompts, and error handling. Read this document fully before making any tool calls.
 
+> **Pre-release — match the plugin to your app version.** CelesteOps and this shim share a contract that changes between versions (e.g. the 1.0.5 snake_case field standardization). Run a shim/`.mcpb` whose version **matches your installed app release** — the shim reports its version on connect (from `manifest.json`); the app's is in Settings → build-info. A mismatched plugin may send or expect renamed fields. After updating the app, re-run `install:mcp` (or reinstall the `.mcpb` / restart the client) so the plugin reloads the matching shim.
+
 > **Tool count:** the shim exposes **67** tools. Confirm what your client sees after connecting — Claude Code: `/mcp`; Celeste CLI: the TUI's MCP panel.
 
 ---
