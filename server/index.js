@@ -941,6 +941,33 @@ server.registerTool('projects_list', {
   return textResult({ count: r.projects.length, projects: r.projects });
 });
 
+// ---- Credential Broker -------------------------------------------------------
+
+server.registerTool('credentials_list', {
+  title: 'List Broker Credentials (metadata only)',
+  description: 'Lists API credentials the app can exercise on your behalf. Returns NAMES + metadata only (purpose, host, allowed_methods, mcp_enabled, last_used_at) — never the key value. Use the name with credential_request.',
+  inputSchema: {},
+}, async () => {
+  const r = await api('GET', '/api/credentials');
+  return textResult({ count: r.credentials.length, credentials: r.credentials });
+});
+
+server.registerTool('credential_request', {
+  title: 'Call an API via the Credential Broker',
+  description: 'Make an HTTP request to a stored credential\'s fixed host with its key injected by the app — you never see the key. The host is fixed by the credential; you supply only method + path (+ optional query/body). Default credentials are read-only. Returns { status, headers, body } with the key redacted.',
+  inputSchema: {
+    name: z.string().describe('credential name from credentials_list'),
+    method: z.string().describe('HTTP method (must be allowed for the credential)'),
+    path: z.string().describe('path on the credential host, starting with /'),
+    query: z.record(z.string(), z.string()).optional(),
+    body: z.string().optional(),
+    content_type: z.string().optional(),
+  },
+}, async ({ name, method, path, query, body, content_type }) => {
+  const r = await api('POST', `/api/credentials/${encodeURIComponent(name)}/request`, { method, path, query, body, content_type });
+  return textResult(r);
+});
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 async function main() {

@@ -1,6 +1,6 @@
 # CelesteOps MCP Server
 
-This document is the single source of truth for any LLM operating the CelesteOps MCP server. It covers what the system is, how to connect, every data entity, all business rules, all 67 tools with full input/output documentation, recommended workflows, example prompts, and error handling. Read this document fully before making any tool calls.
+This document is the single source of truth for any LLM operating the CelesteOps MCP server. It covers what the system is, how to connect, every data entity, all business rules, all 69 tools with full input/output documentation, recommended workflows, example prompts, and error handling. Read this document fully before making any tool calls.
 
 > **Tool count:** the shim exposes **67** tools. Confirm what your client sees after connecting — Claude Code: `/mcp`; Celeste CLI: the TUI's MCP panel.
 
@@ -29,6 +29,7 @@ This document is the single source of truth for any LLM operating the CelesteOps
    - [Daily Notes](#group-13-daily-notes)
    - [Projects & Tags](#group-14-projects--tags)
    - [Prototypes](#group-15-prototypes)
+   - [Credential Broker](#group-16-credential-broker)
 7. [Example Prompts](#example-prompts)
 8. [Error Handling](#error-handling)
 
@@ -50,7 +51,7 @@ CelesteOps manages:
 All data lives in a local SQLite database. There are two front-ends over the same database layer, both entirely local:
 
 - **The app's HTTP API**, hosted by the running desktop app on `127.0.0.1:43121`. This is the single writer — its UI live-updates as changes land.
-- **A stdio MCP shim** (`server/index.js` in this kit), which exposes all 67 tools over the Model Context Protocol and forwards each call to that HTTP API. This is what MCP clients (Claude Code, Claude Desktop, Cursor, Codex, …) connect to.
+- **A stdio MCP shim** (`server/index.js` in this kit), which exposes all 69 tools over the Model Context Protocol and forwards each call to that HTTP API. This is what MCP clients (Claude Code, Claude Desktop, Cursor, Codex, …) connect to.
 
 ---
 
@@ -69,18 +70,20 @@ curl -s http://127.0.0.1:43121/api/health
 
 If `curl` connects and returns `{"ok":true,...}`, the app is up and the fault is elsewhere (client config or sandbox). If it refuses the connection, the app isn't running — launch `CelesteOps.app`.
 
-### Step 2: One-command install (recommended)
+### Step 2: Pair and install
 
-From the cloned repo root:
+From the cloned repo root. First mint a pairing code in the app — **Settings → Connections → Add Client** — selecting the client you're wiring (Claude Code, Claude Desktop, Cursor, Codex, or Celeste CLI), then copy the 6-digit code. The code is single-use and bound to that one client.
 
 ```bash
-cd server && npm install && cd ..   # once, vendors the shim's deps
-bun run install:mcp                 # detect installed clients and wire them up
+cd server && npm install && cd ..                       # once, vendors the shim's deps
+bun run install:mcp --pair <code> --client claude-code  # substitute the client slug
 ```
 
-This merges a `celeste-ops` MCP server into each detected client's config — **Claude Code** (`.mcp.json`), **Claude Desktop** (`claude_desktop_config.json`), **Cursor** (`~/.cursor/mcp.json`), **Codex** (`~/.codex/config.toml`), and **Celeste CLI** (`~/.celeste/mcp.json`) — preserving any other servers and backing up each file to `<file>.bak`. Use `--dry-run` to preview, `--port <n>` for a non-default API port. Restart each client afterward. **The CelesteOps app must be running** (the shim talks to its HTTP API).
+`--client` is one of: `claude-code` | `claude-desktop` | `cursor` | `codex` | `celeste-cli`. Each run enrolls **one** client (single-use code) and merges a `celeste-ops` MCP server into its config — **Claude Code** (`~/.claude.json`, user scope), **Claude Desktop** (`claude_desktop_config.json`), **Cursor** (`~/.cursor/mcp.json`), **Codex** (`~/.codex/config.toml`), and **Celeste CLI** (`~/.celeste/mcp.json`) — preserving any other servers and backing up each file to `<file>.bak`. Use `--dry-run` to preview, `--port <n>` for a non-default API port. **Restart the client** afterward. To wire more clients, mint a fresh code per client and re-run with the matching `--client`. **The CelesteOps app must be running** (the shim talks to its HTTP API).
 
-> **Celeste CLI note:** external MCP servers are loaded only by the interactive `celeste chat` TUI (not `message`/`agent`/`serve`). On launch it connects to the shim and registers all 67 tools — confirm in the TUI's MCP panel.
+> Running `install:mcp` with no `--pair`/`--client` auto-detects and wires every client, but enrolls them **unpaired** — the app then answers each with a `401` until you pair it. Always pair: pass `--pair <code> --client <slug>`.
+
+> **Celeste CLI note:** external MCP servers are loaded only by the interactive `celeste chat` TUI (not `message`/`agent`/`serve`). On launch it connects to the shim and registers all 69 tools — confirm in the TUI's MCP panel.
 
 For Claude Desktop, the packaged `celeste-ops.mcpb` bundle is the preferred one-click path (drag onto **Settings → Extensions**).
 
@@ -608,7 +611,7 @@ Restore is available only via the desktop app UI (Settings → Backup History �
 
 ## Tool Reference
 
-All 67 tools are documented below in groups. Every tool returns a JSON object serialized as a text content block. Parse the `text` field of the first content item as JSON.
+All 69 tools are documented below in groups. Every tool returns a JSON object serialized as a text content block. Parse the `text` field of the first content item as JSON.
 
 Response envelope shape for all tools:
 
@@ -2475,6 +2478,82 @@ Returns the documents that **embed** this prototype (via a ` ```prototype ` bloc
 
 ---
 
+### Group 16: Credential Broker
+
+The credential broker lets an agent **exercise a stored API key against a fixed host without ever seeing the key**. The user provisions a credential in the app (Settings → Vault) with a host, an injection method (`bearer`/`header`/`query`/`basic`), and the secret; the app holds the secret encrypted at rest (AES-256-GCM, master key in the OS keychain). An agent then calls the credential's host through the broker — the app injects the key server-side and **redacts every form of it from the response** before returning.
+
+**Security model (read before use):** the host is **welded to the credential** — you supply only method + path (+ optional query/body), never a URL, and the request can only reach that host (SSRF-guarded: no localhost/private IPs). Credentials default to **read-only** (`GET`/`HEAD`); other methods must be explicitly allowed. Only credentials the user has **MCP-enabled** are listed or callable — a disabled or non-existent credential is indistinguishable (`credential not found`). The key value and `secret_ciphertext` are **never** returned by any tool.
+
+---
+
+#### `credentials_list`
+
+Lists the MCP-enabled credentials the app can exercise on your behalf — **names + metadata only**, never the key value. Use a returned `name` with `credential_request`.
+
+**Inputs**
+
+None.
+
+**Returns**
+
+```json
+{
+  "count": 1,
+  "credentials": [
+    {
+      "id": "cred-uuid",
+      "name": "openai",
+      "purpose": "read model list",
+      "host": "api.openai.com",
+      "injection_type": "bearer",
+      "allowed_methods": ["GET", "HEAD"],
+      "mcp_enabled": 1,
+      "last_used_at": "2026-06-16T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Notes**
+
+- Only `mcp_enabled` credentials are returned. The secret value is never included.
+- `count` is `credentials.length`.
+
+---
+
+#### `credential_request`
+
+Make an HTTP request to a stored credential's fixed host with its key injected by the app. You never see the key; you supply only `method` + `path` (+ optional `query`/`body`/`content_type`). Returns `{ status, headers, body }` with every form of the key **redacted** from the response.
+
+**Inputs**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | `string` | Yes | Credential name from `credentials_list`. |
+| `method` | `string` | Yes | HTTP method. Must be in the credential's `allowed_methods` (default `GET`/`HEAD`). |
+| `path` | `string` | Yes | Path on the credential's host, starting with `/`. The host is fixed by the credential and cannot be overridden. |
+| `query` | `object` (string→string) | No | Query parameters, appended to the path. |
+| `body` | `string` | No | Request body (for write methods, when allowed). |
+| `content_type` | `string` | No | `Content-Type` for the body. |
+
+**Returns**
+
+```json
+{
+  "status": 200,
+  "headers": { "content-type": "application/json" },
+  "body": "{ ...upstream response, key redacted to [REDACTED]... }"
+}
+```
+
+**Notes**
+
+- A missing, non-existent, or non-`mcp_enabled` credential returns `credential not found` (existence is hidden).
+- A method not in `allowed_methods` is rejected (default credentials are read-only).
+- Sensitive response headers (e.g. `Set-Cookie`) are stripped; only a safe allowlist is returned. The key value never appears in `body` or `headers`.
+
+---
+
 ## Example Prompts
 
 The following are concrete prompts an operator might issue and which tools to call in response.
@@ -2623,7 +2702,7 @@ Note: Only 3 P1s allowed per day. Check `p1ActiveCount` first; use P2 if cap is 
 **Resolution**:
 1. Health-check the API: `curl -s http://127.0.0.1:43121/api/health`. If it returns `{"ok":true,...}`, the app is up — skip to step 3.
 2. If `curl` is refused, the app is down. Launch `CelesteOps.app`. Then re-run the health check.
-3. App is up but a client still can't see the tools → the client isn't wired to the shim. Re-run `bun run install:mcp` (or `--dry-run` to inspect the resolved config) and restart the client. A **sandboxed client (e.g. Codex) that blocks loopback is not the cause** — the client↔shim hop is stdio, so the sandbox never sees the HTTP call; the shim (a normal subprocess) makes it.
+3. App is up but a client still can't see the tools → the client isn't wired to the shim. Mint a fresh pairing code (Settings → Connections → Add Client) and re-run `bun run install:mcp --pair <code> --client <slug>` (add `--dry-run` to inspect the resolved config), then restart the client. A `401` from the app means the client is wired but unpaired — re-run with a fresh `--pair` code. A **sandboxed client (e.g. Codex) that blocks loopback is not the cause** — the client↔shim hop is stdio, so the sandbox never sees the HTTP call; the shim (a normal subprocess) makes it.
 4. Non-default port: ensure the app's port and the shim's `CELESTE_OPS_API_PORT` match; reinstall with `bun run install:mcp --port <n>`.
 
 ---

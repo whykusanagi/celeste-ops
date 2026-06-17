@@ -14,8 +14,12 @@ like Codex that block direct loopback.
   ([VERIFY.md](./VERIFY.md)), unzip it, move `CelesteOps.app` to `/Applications`,
   and launch it. The shim forwards to its API on `127.0.0.1:43121`.
 - This repo, cloned locally — for Claude Code, Cursor, Codex, and Celeste CLI
-  (you run the installer from it). **Claude Desktop doesn't need it** — it installs
-  from `celeste-ops.mcpb` directly (see below).
+  (you run the installer from it):
+  ```bash
+  git clone https://github.com/whykusanagi/celeste-ops.git && cd celeste-ops
+  ```
+  **Claude Desktop doesn't need it** — it installs from `celeste-ops.mcpb`
+  directly (see below).
 - Node 18+ (runs the shim) and [Bun](https://bun.sh) (runs the installer). The
   installer writes the shim's absolute node path into each config, so GUI clients
   that don't inherit your shell `PATH` still launch it.
@@ -26,8 +30,10 @@ like Codex that block direct loopback.
 # 1. Vendor the shim's dependencies (once).
 cd server && npm install && cd ..
 
-# 2. In the app: Settings → Connections → pick a product → Add Client.
-#    Copy the 6-digit code (it's bound to that one product).
+# 2. In the app: Settings → Connections → pick a client → Add Client.
+#    A "client" is the MCP app you're connecting — one of: claude-code |
+#    claude-desktop | cursor | codex | celeste-cli (matches --client below).
+#    Copy the 6-digit code (it's bound to that one client).
 
 # 3. Enroll THAT client and write its config. One client per run, single-use code.
 #    --client is one of: claude-code | claude-desktop | cursor | codex | celeste-cli
@@ -43,7 +49,7 @@ others → `claude_desktop_config.json`, `~/.cursor/mcp.json`, `~/.codex/config.
 `~/.celeste/mcp.json`). It preserves your other servers and backs up each file
 before writing. Use `--dry-run` to preview and `--port <n>` for a non-default API port.
 
-A pairing code is **single-use** and bound to one product: each code enrolls one
+A pairing code is **single-use** and bound to one client: each code enrolls one
 client, and re-running a spent code fails (no token sprawl). To wire several
 clients, generate a fresh code per client and re-run with the matching `--client`.
 Run `install:mcp` without `--pair`/`--client` to wire all detected clients with no
@@ -86,7 +92,7 @@ any token there, and set an expiry. The list updates as clients connect.
 
 ## See also
 
-- [`MCP.md`](./MCP.md): the 67-tool reference for agents.
+- [`MCP.md`](./MCP.md): the 69-tool reference for agents.
 - [`VERIFY.md`](./VERIFY.md): verify a downloaded release with PGP.
 - [`skills/celesteops-tasks`](./skills/celesteops-tasks): a skill that teaches an
   agent to read and write CelesteOps tasks.
