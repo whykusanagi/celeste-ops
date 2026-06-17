@@ -945,7 +945,7 @@ server.registerTool('projects_list', {
 
 server.registerTool('credentials_list', {
   title: 'List Broker Credentials (metadata only)',
-  description: 'Lists API credentials the app can exercise on your behalf. Returns NAMES + metadata only (purpose, host, allowed_methods, mcp_enabled, last_used_at) — never the key value. Use the name with credential_request.',
+  description: 'Lists API credentials the app can exercise on your behalf. Returns NAMES + metadata only (purpose, host, allowed_methods, mcp_enabled, last_used_at) — never the key value. Only MCP-enabled credentials are returned. Use the name with credential_request.',
   inputSchema: {},
 }, async () => {
   const r = await api('GET', '/api/credentials');
